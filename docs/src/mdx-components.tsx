@@ -35,10 +35,7 @@ function CodePre({
           <div>{filename}</div>
         </div>
       )}
-      <pre
-        className={`${className} bg-transparent font-code my-0`}
-        style={{ background: "transparent" }}
-      >
+      <pre className={`${className} bg-transparent font-code my-0`}>
         <TextReplace vars={props}>{children}</TextReplace>
       </pre>
     </div>

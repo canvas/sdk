@@ -10,19 +10,9 @@ export function LanguageIcon({
 }) {
   switch (language) {
     case "tsx":
-      return (
-        <ReactLangIcon
-          className={`${className} mt-px`}
-          style={{ width: 12, height: 12 }}
-        />
-      );
+      return <ReactLangIcon className={`${className} mt-px`} />;
     case "typescript":
-      return (
-        <TypescriptIcon
-          className={`${className} -mt-px`}
-          style={{ width: 12, height: 12 }}
-        />
-      );
+      return <TypescriptIcon className={`${className} -mt-px`} />;
     default:
       return null;
   }
