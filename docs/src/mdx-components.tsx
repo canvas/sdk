@@ -2,7 +2,6 @@ import type { MDXComponents } from "mdx/types";
 import { Fragment, ReactNode, cloneElement, isValidElement } from "react";
 import { LanguageIcon } from "./app/components/client/language-icon";
 import { CodeTab } from "./app/components/client/mdx";
-// import { CodeSwitcherWithCookie } from "@/app/components/code-switcher";
 
 export function useMDXComponents(components: MDXComponents): MDXComponents {
   return {
@@ -11,7 +10,6 @@ export function useMDXComponents(components: MDXComponents): MDXComponents {
     code: ({ children, ...props }) => {
       return <>{children}</>;
     },
-    // CodeSwitcher: CodeSwitcherWithCookie,
     CodeTab,
   };
 }
