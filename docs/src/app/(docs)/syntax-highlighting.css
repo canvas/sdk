@@ -1,0 +1,31 @@
+.token {
+	color: #828487;
+}
+
+.token.keyword,
+.token.punctuation {
+	color: #afb0b2;
+}
+
+.token.imports,
+.token.function,
+.token.class-name,
+.token.maybe-class-name,
+.token.tag {
+	color: #58595b;
+	font-weight: 500;
+}
+
+.token.string,
+.token.number, .token.tag > .token.attr-value, .token.tag > .token.attr-value > .token.punctuation:not(.attr-equals) {
+	background-image: linear-gradient(to bottom, var(--gradient-start), var(--gradient-end));
+	background-clip: text;
+	color: transparent;
+	font-weight: 500;
+}
+
+pre[class*="language-"] {
+	font-size: 16px;
+	line-height: 1.5;
+	color: #2b2b2c;
+}

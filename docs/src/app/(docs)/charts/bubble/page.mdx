@@ -1,0 +1,118 @@
+import { Chart } from "@canvas-sdk/charts";
+
+# Bubble charts
+
+{/*
+## Standalone
+
+<Chart
+  x={[new Date(2024, 1, 1), new Date(2024, 2, 1), new Date(2024, 3, 1)]} 
+  y={[100, 5, 6]} 
+  type="bubble"
+  options={{showAxis: true}}
+>
+</Chart>
+
+```tsx filename="chart.tsx"
+<Chart
+  x={[new Date(2024, 1, 1), new Date(2024, 2, 1), new Date(2024, 3, 1)]} 
+  y={[100, 5, 6]} 
+  type="bubble"
+>
+</Chart>
+```
+*/}
+
+## Inline
+
+
+export function randint(max) {
+  return Math.floor(Math.random() * max);
+}
+
+export function sampleSet() {
+  const data = [];
+  const samples = 3 + randint(7);
+  for (let i = 0; i < samples; i++) {
+    data.push({ x: new Date(2024, 1, randint(100)), r: randint(10) });
+  }
+  return data;
+}
+
+export const customers = [
+  { user: 'Christian', company: 'Lackawanna County', lastActivity: '3 mins ago' },
+  { user: 'Principal', company: 'Dunmore High School', lastActivity: '20 mins ago' },
+  { user: 'Aaron', company: 'Stone, Cooper, and Grandy', lastActivity: '5 hours ago' },
+];
+
+<table className="fill-gradient-end">
+<tbody>
+{customers.map(({user, company, lastActivity}) => {
+    const data = sampleSet();
+    return (<tr key={user}>
+        <td className="align-middle">{user}</td> 
+        <td className="align-middle">{company}</td> 
+        <td className="p-0"><Chart
+                x={data.map(point => point.x)} 
+                y={data.map(point => point.r)} 
+                type="bubble"
+                width={300}
+                height={48}
+                key={user}
+                >
+            </Chart>
+        </td>
+        <td className="align-middle">{lastActivity}</td>
+        </tr>);
+})}
+</tbody>
+</table>
+
+```tsx filename="app/activity/page.tsx"
+import { Chart } from "@canvas-sdk/charts";
+
+const customers = [
+  { user: 'Christian', company: 'Lackawanna County' },
+  { user: 'Principal', company: 'Dunmore High School' },
+  { user: 'Aaron', company: 'Stone, Cooper, and Grandy' },
+];
+
+const data = [
+  { date: new Date('2024-02-26'), size: 3 },
+  { date: new Date('2024-03-27'), size: 8 },
+  { date: new Date('2024-02-23'), size: 5 },
+  { date: new Date('2024-04-17'), size: 5 },
+  { date: new Date('2024-04-13'), size: 9 },
+  { date: new Date('2024-02-29'), size: 7 },
+  { date: new Date('2024-02-21'), size: 6 }
+]
+
+export default function Activity() {
+  return (
+    <table className="fill-blue-500">
+      <tbody>
+        {customers.map(({ user, company, lastActivity }) => {
+          const data = sampleSet();
+          return (
+            <tr key={user}>
+              <td className="align-middle">{user}</td>
+              <td className="align-middle">{company}</td>
+              <td className="p-0">
+                <Chart
+                  x={data.map((point) => point.date)}
+                  y={data.map((point) => point.size)}
+                  type="bubble"
+                  width={300}
+                  height={48}
+                  key={user}
+                ></Chart>
+              </td>
+              <td className="align-middle">{lastActivity}</td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+```

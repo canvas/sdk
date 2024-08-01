@@ -1,0 +1,14 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import "./themes.css";
+
+@layer base {
+    :root {
+        --primary: hsl(223, 100%, 59%) /* #2e69ff */;
+
+        --gradient-start: 	hsl(256, 100%, 57%); /* #5e24ff */
+        --gradient-end: hsl(223, 100%, 59%);
+    }
+}

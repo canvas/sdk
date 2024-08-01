@@ -1,0 +1,29 @@
+.theme-sapphire {
+    /* #2e69ff */
+    --primary: hsl(223, 100%, 59%);
+
+    /* #5e24ff */
+    --gradient-start: hsl(256, 100%, 57%);
+    --gradient-end: hsl(223, 100%, 59%);
+}
+
+.theme-emerald,
+.language-node {
+    --gradient-start: hsl(164, 70%, 35%);
+    /* todo */
+    --gradient-end: hsl(134, 60%, 42%);
+}
+
+.theme-ruby,
+pre.language-ruby {
+    --gradient-start: hsl(320, 93%, 50%);
+    /* todo */
+    --gradient-end: hsl(347, 93%, 55%);
+}
+
+.theme-amber {
+    --primary: hsl(31, 94%, 49%);
+
+    --gradient-start: hsl(55, 96%, 43%);
+    --gradient-end: hsl(31, 94%, 49%);
+    }
