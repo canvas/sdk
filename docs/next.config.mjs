@@ -5,6 +5,7 @@ import rehypeMdxCodeProps from "rehype-mdx-code-props";
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  basePath: "/sdk",
   webpack(config) {
     const fileLoaderRule = config.module.rules.find((rule) =>
       rule.test?.test?.(".svg")
