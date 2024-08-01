@@ -1,6 +1,5 @@
 import { ReactNode } from "react";
 import { SidebarOption } from "../components/sidebar-option";
-import { Header } from "../components/layout/header";
 import localFont from "next/font/local";
 import { Inter, Inconsolata } from "next/font/google";
 
@@ -48,7 +47,6 @@ export default function Layout({ children }: { children: ReactNode }) {
     <div
       className={`${twkLausanne.variable} ${inter.className} ${inconsolata.variable}`}
     >
-      <Header filledBackground={true} subtitle={""} description={""} />
 
       <main className="relative mx-auto mt-16 flex max-w-[1148px]">
         <div className="top-[192px] flex flex-col gap-6 self-start lg:w-[256px] shrink-0">
