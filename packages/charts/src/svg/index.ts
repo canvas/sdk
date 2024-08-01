@@ -1,0 +1,1 @@
+export { useLinearGradient } from "./gradient";

@@ -1,0 +1,37 @@
+{
+  "name": "@canvas-sdk/charts",
+  "version": "0.5.0",
+  "repository": {
+    "url": "git+https://github.com/canvas/sdk.git",
+    "directory": "packages/charts"
+  },
+  "exports": {
+    ".": "./dist/index.js",
+    "./scale": "./dist/scale/index.js",
+    "./svg": "./dist/svg/index.js"
+  },
+  "types": "dist/types.d.ts",
+  "files": [
+    "dist",
+    "dist/scale/index.js",
+    "dist/scale/index.d.ts"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc --declaration --project tsconfig.json",
+    "dev": "tsc --declaration --watch --project tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3"
+  },
+  "peerDependencies": {
+    "react": "^18.3.1"
+  },
+  "description": "A modern React library for responsive SVG charts ",
+  "main": "index.js",
+  "keywords": [
+    "charts"
+  ],
+  "author": "Infinite Canvas Inc.",
+  "homepage": "https://github.com/canvas/sdk"
+}

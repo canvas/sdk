@@ -1,0 +1,14 @@
+{
+    "compilerOptions": {
+      "strict": true,
+      "resolveJsonModule": true,
+      "module": "commonjs",
+      "esModuleInterop": true,
+      "target": "es2022",
+      "outDir": "dist",
+      "rootDir": "src",
+      "jsx": "react-jsx"
+    },
+    "include": ["src/**/*.ts", "src/**/*.tsx"],
+    "exclude": ["node_modules", "src/**/*.test.ts"]
+}
