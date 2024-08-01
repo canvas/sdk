@@ -30,7 +30,7 @@ function CodePre({
         <div className="text-[12px] font-semibold text-marble-800 px-4 py-2 border-b bg-marble-50 hover:bg-marble-100 border-b-marble-900/10 rounded-t-lg flex gap-1.5 items-center">
           <LanguageIcon
             language={className?.replace("language-", "") ?? ""}
-            className="size-3 w-3 h-3"
+            className="size-3"
           />
           <div>{filename}</div>
         </div>
