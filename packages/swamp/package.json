@@ -1,0 +1,49 @@
+{
+  "name": "@canvas-sdk/swamp",
+  "version": "0.1.0",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsc --watch",
+    "build": "tsc & cp package.json dist/",
+    "lint": "eslint --fix src",
+    "typecheck": "tsc --noEmit"
+  },
+  "author": "Infinite Canvas Inc.",
+  "homepage": "https://github.com/canvas/sdk",
+  "license": "MIT",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.624.0",
+    "axios": "^1.7.2",
+    "better-sqlite3": "^11.0.0",
+    "cors": "^2.8.5",
+    "debounce": "^2.1.0",
+    "duckdb": "^1.0.0",
+    "express": "^4.19.2",
+    "helmet": "^7.1.0",
+    "js-yaml": "^4.1.0",
+    "morgan": "^1.10.0",
+    "neverthrow": "^7.0.0",
+    "pg": "^8.12.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.10",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jest": "^29.5.12",
+    "@types/js-yaml": "^4.0.9",
+    "@types/morgan": "^1.9.9",
+    "@types/node": "^20.12.6",
+    "@types/pg": "^8.11.6",
+    "@typescript-eslint/eslint-plugin": "^7.6.0",
+    "@typescript-eslint/parser": "^7.6.0",
+    "eslint": "^8.57.0",
+    "eslint-config-airbnb-typescript": "^18.0.0",
+    "eslint-import-resolver-typescript": "^3.6.1",
+    "eslint-plugin-import": "^2.29.1",
+    "nodemon": "^3.1.0",
+    "tree-kill": "^1.2.2",
+    "typescript": "^5.4.4"
+  },
+  "type": "commonjs"
+}
