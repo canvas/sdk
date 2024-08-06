@@ -1,5 +1,5 @@
-import { Result } from 'neverthrow';
-import { z } from 'zod';
+import { Result } from "neverthrow";
+import { z } from "zod";
 
 export const S3Credentials = z.object({
   keyId: z.string(),
@@ -9,9 +9,9 @@ export const S3Credentials = z.object({
 });
 export type S3Credentials = z.infer<typeof S3Credentials>;
 
-export type FileDataType = 'json' | 'parquet';
+export type FileDataType = "json" | "parquet";
 
-export type FileLocation = 'local' | 's3';
+export type FileLocation = "local" | "s3";
 
 export type DataLocation = {
   dataType: FileDataType;
@@ -22,8 +22,7 @@ export type DataLocation = {
   columnSchema: Record<string, ColumnSchema>;
 };
 
-type Run = { type: 'run', force: boolean };
-
+type Run = { type: "run"; force: boolean };
 
 type RecordBatch = {
   primaryKeys: string[];
@@ -32,17 +31,28 @@ type RecordBatch = {
 
 export type Inserts = Record<string, RecordBatch>;
 
-export const DuckDBRawType = z.enum(['VARCHAR', 'DOUBLE', 'DATE', 'TIMESTAMP', 'JSON', 'BOOLEAN', 'BIGINT', 'BLOB']);
+export const DuckDBRawType = z.enum([
+  "VARCHAR",
+  "DOUBLE",
+  "DATE",
+  "TIMESTAMP",
+  "JSON",
+  "BOOLEAN",
+  "BIGINT",
+  "BLOB",
+]);
 export type DuckDBRawType = z.infer<typeof DuckDBRawType>;
 
-export const DuckDBType = z.union([z.object({
-  type: DuckDBRawType,
-}), z.object({
-  type: z.literal('ARRAY'),
-  innerType: DuckDBRawType,
-})]);
+export const DuckDBType = z.union([
+  z.object({
+    type: DuckDBRawType,
+  }),
+  z.object({
+    type: z.literal("ARRAY"),
+    innerType: DuckDBRawType,
+  }),
+]);
 export type DuckDBType = z.infer<typeof DuckDBType>;
-
 
 export const ColumnSchema = z.object({
   columnType: DuckDBType,
@@ -61,8 +71,8 @@ export type RawLoaderInserts = Record<string, RawLoaderInsert>;
 type LoaderInsert = RawLoaderInsert & { schemaName: string };
 export type LoaderInserts = Record<string, LoaderInsert>;
 
-export type CreateRecordsEvent =  {
-  type: 'records';
+export type CreateRecordsEvent = {
+  type: "records";
   inserts: LoaderInserts;
 };
 
@@ -74,24 +84,26 @@ export type TransformerEmitter = (event: TransformerOutputEvent) => void;
 
 const LoaderSecrets = z.record(z.string()).nullable();
 
-
-export type LoaderResponse<CursorType> = {
-  type: 'success',
-  cursor: CursorType,
-  inserts: Inserts,
-  hasMore: boolean,
-} | {
-  type :'error',
-  message: string,
-};
+export type LoaderResponse<CursorType> =
+  | {
+      type: "success";
+      cursor: CursorType;
+      inserts: Inserts;
+      hasMore: boolean;
+    }
+  | {
+      type: "error";
+      message: string;
+    };
 export type LoaderSecrets = z.infer<typeof LoaderSecrets>;
 
-export type Loader<SecretsType, CursorType> = { 
-  (secrets: SecretsType | null, cursor: CursorType | null): Promise<LoaderResponse<CursorType>>
+export type Loader<SecretsType, CursorType> = {
+  (secrets: SecretsType | null, cursor: CursorType | null): Promise<
+    LoaderResponse<CursorType>
+  >;
   cursor: z.AnyZodObject;
   secrets: z.AnyZodObject | null;
 };
-
 
 export type TransformSQLResult = {
   query: string;
@@ -100,7 +112,7 @@ export type TransformSQLResult = {
 };
 export type TransformSQL = {
   (): Result<TransformSQLResult, string>;
-  type: 'sql';
+  type: "sql";
   filePath?: string;
 };
 
@@ -120,7 +132,6 @@ export type ReadDataLocation = {
 };
 
 export abstract class BaseTransformer {
-
   uniqueId: string;
 
   subscriptions: SubscriptionType[];
@@ -129,7 +140,7 @@ export abstract class BaseTransformer {
 
   filePath: string | null;
 
-  abstract readonly transformType: 'load' | 'transform';
+  abstract readonly transformType: "load" | "transform";
 
   constructor(uniqueId: string) {
     this.uniqueId = uniqueId;
@@ -138,8 +149,11 @@ export abstract class BaseTransformer {
     this.filePath = null;
   }
 
-  abstract execute(event: TransformerInputEvent, locations: ReadDataLocation[]): void;
-	
+  abstract execute(
+    event: TransformerInputEvent,
+    locations: ReadDataLocation[]
+  ): void;
+
   withSubscription(transformer: BaseTransformer, tables: string[]) {
     this.subscriptions.push({ uniqueId: transformer.uniqueId, tables });
     return this;

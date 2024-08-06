@@ -1,5 +1,5 @@
 import { ColumnInfo, TableData, Database } from "duckdb";
-import { TableObject, TableStoreInterface } from "../store/sqlite.store";
+import { TableStoreInterface } from "../store/sqlite.store";
 import {
   createS3SecretStatement,
   generateRandomAlphanumeric,
@@ -138,7 +138,15 @@ function mergeSchemas(
   };
 }
 
-type WriteQueue = { filePath: string };
+type StagedFile = {
+  schemaName: string;
+  tableName: string;
+  filePath: string;
+  writeFolder: string;
+  columnSchema: ColumnsSchema;
+};
+
+type WriteQueue = { stagedFile: StagedFile };
 
 export class InMemoryDuckDb implements SqlEngine {
   db: Database | null;
@@ -175,12 +183,12 @@ export class InMemoryDuckDb implements SqlEngine {
         await sleep(1000);
         continue;
       }
-      await this.commitTableToStorage(schemaTable.filePath);
+      await this.commitTableToStorage(schemaTable.stagedFile);
     }
   }
 
-  queueWrite(filePath: string) {
-    this.uploadQueue.push({ filePath });
+  queueWrite(stagedFile: StagedFile) {
+    this.uploadQueue.push({ stagedFile });
   }
 
   dequeueWrite(): WriteQueue | null {
@@ -190,13 +198,41 @@ export class InMemoryDuckDb implements SqlEngine {
     return this.uploadQueue.shift()!;
   }
 
-  async commitTableToStorage(writePath: string): Promise<Result<void, string>> {
+  async commitTableToStorage(
+    stagedFile: StagedFile
+  ): Promise<Result<void, string>> {
     if (this.credentials) {
-      const tryUpload = await uploadFileToS3(this.credentials, writePath);
+      const tryUpload = await uploadFileToS3(
+        this.credentials,
+        stagedFile.filePath
+      );
       if (tryUpload.isErr()) {
         console.error(`Error uploading to S3: ${tryUpload.error}`);
         return err(tryUpload.error);
       }
+    }
+
+    const { schemaName, tableName, columnSchema, writeFolder } = stagedFile;
+    const existingTable = await this.store.getTable(schemaName, tableName);
+
+    const newColumnSchema =
+      existingTable === null
+        ? columnSchema
+        : mergeSchemas(existingTable.columnSchema, columnSchema);
+
+    const dataLocation: DataLocation = {
+      location: writeFolder,
+      dataType: "parquet" as const,
+      tableName,
+      schemaName,
+      columnSchema: newColumnSchema,
+      fileLocation: "local",
+    };
+
+    if (existingTable === null) {
+      await this.addNewTable(dataLocation);
+    } else {
+      await this.updateTables([dataLocation]);
     }
     return ok(undefined);
   }
@@ -252,26 +288,13 @@ export class InMemoryDuckDb implements SqlEngine {
           `Wrote ${parquetFile.value.recordCount} records to table ${schemaName}.${tableName}`
         );
 
-        const newColumnSchema =
-          existingTable === null
-            ? columnSchema
-            : mergeSchemas(existingTable.columnSchema, columnSchema);
-
-        const dataLocation: DataLocation = {
-          location: writeFolder,
-          dataType: "parquet" as const,
-          tableName,
+        this.queueWrite({
           schemaName,
-          columnSchema: newColumnSchema,
-          fileLocation: "local",
-        };
-        if (existingTable === null) {
-          await this.addNewTable(dataLocation);
-        } else {
-          await this.updateTables([dataLocation]);
-        }
-
-        this.queueWrite(parquetFile.value.filePath);
+          tableName,
+          filePath: writePath,
+          writeFolder,
+          columnSchema,
+        });
       }
     } finally {
       this.writeLock.release();
@@ -284,12 +307,12 @@ export class InMemoryDuckDb implements SqlEngine {
     return this;
   }
 
-  async addNewTable(table: TableObject): Promise<void> {
+  async addNewTable(table: DataLocation): Promise<void> {
     await this.store.addTable(table);
     await this.updateTables([table]);
   }
 
-  async updateTables(tables: TableObject[]): Promise<void> {
+  async updateTables(tables: DataLocation[]): Promise<void> {
     const db = await this.getDb();
     await addDuckDBTables(db, tables);
   }
