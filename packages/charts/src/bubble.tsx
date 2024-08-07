@@ -5,13 +5,13 @@ import { Data, Ordinal } from "./lib/types";
 export function BubbleChart<DomainValue extends Ordinal>({
   xScale,
   yScale,
-  sizeScale,
+  sizes,
   data,
   className,
 }: {
   xScale: Scale<DomainValue>;
   yScale: Scale<number>;
-  sizeScale: Scale<number>;
+  sizes: number[];
   data: Data<DomainValue>;
   className?: string;
 }): ReactElement {
@@ -19,19 +19,27 @@ export function BubbleChart<DomainValue extends Ordinal>({
     <g className={className}>
       {data.map((point, index) => {
         const x = xScale.midPoint(point.x);
-        const y = (yScale.rangeMin + yScale.rangeMax) / 2;
-        const size = Array.isArray(point.y) ? point.y[0] : point.y;
+
+        const yPoint = Array.isArray(point.y) ? point.y[0] : point.y;
+        let y;
+        if (yPoint === null || yPoint === undefined) {
+          y = (yScale.rangeMin + yScale.rangeMax) / 2;
+        } else {
+          y = yScale.midPoint(yPoint);
+        }
+        const size = sizes[index];
 
         if (size === null) {
           return;
         }
-        const bubbleSize = Math.sqrt(Math.abs(yScale.size(size)));
+
+        const bubbleDiameter = Math.sqrt(Math.abs(size));
 
         return (
           <circle
             cx={10 + x}
             cy={y}
-            r={bubbleSize}
+            r={bubbleDiameter / 2}
             style={{ opacity: 0.6 }}
             key={index}
           />

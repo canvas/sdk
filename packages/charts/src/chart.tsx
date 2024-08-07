@@ -20,6 +20,7 @@ type TableColumn = any; /* TODO */
 export function Chart({
   x,
   y,
+  sizes,
   type,
   width: argWidth,
   height = 300,
@@ -27,6 +28,7 @@ export function Chart({
 }: {
   x: TableColumn;
   y: TableColumn;
+  sizes?: number[];
   type: "line" | "bar" | "bubble";
   width?: number;
   height?: number;
@@ -118,7 +120,7 @@ export function Chart({
             <BubbleChart
               xScale={xScale as any}
               yScale={yScale}
-              sizeScale={yScale}
+              sizes={sizes}
               data={
                 data.x.map((x: any, index: number) => ({
                   x,
