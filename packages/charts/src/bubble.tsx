@@ -20,13 +20,18 @@ export function BubbleChart<DomainValue extends Ordinal>({
       {data.map((point, index) => {
         const x = xScale.midPoint(point.x);
         const y = (yScale.rangeMin + yScale.rangeMax) / 2;
-        const size = yScale.midPoint(point.y);
+        const size = Array.isArray(point.y) ? point.y[0] : point.y;
+
+        if (size === null) {
+          return;
+        }
+        const bubbleSize = Math.sqrt(Math.abs(yScale.size(size)));
 
         return (
           <circle
             cx={10 + x}
             cy={y}
-            r={Math.sqrt(size)}
+            r={bubbleSize}
             style={{ opacity: 0.6 }}
             key={index}
           />
