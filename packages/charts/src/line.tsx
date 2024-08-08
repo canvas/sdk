@@ -1,4 +1,4 @@
-import { ReactElement } from "react";
+import { Fragment, ReactElement } from "react";
 import { Scale } from "./lib/types";
 import { Data, Ordinal } from "./lib/types";
 import { lineTo, moveCursorTo, roundPixel } from "./svg/path";
@@ -16,6 +16,7 @@ export function LineChart<DomainValue extends Ordinal>({
   className?: string;
   options?: {
     gradient?: string;
+    showMarkers?: boolean;
   };
 }): ReactElement {
   const gradient = options?.gradient;
@@ -25,6 +26,10 @@ export function LineChart<DomainValue extends Ordinal>({
   const paths: string[][] = new Array(seriesCount).fill(null).map((_) => {
     return [];
   });
+
+  const markers: { x: number; y: number }[][] = paths.map((_) => []);
+  const showMarkers = options?.showMarkers ?? data.length <= 5;
+
   data.forEach((point, pointIndex) => {
     const values = Array.isArray(point.y) ? point.y : [point.y];
 
@@ -43,6 +48,12 @@ export function LineChart<DomainValue extends Ordinal>({
       const path = paths[valueIndex];
       if (path) {
         path.push(command);
+      }
+
+      if (showMarkers) {
+        if (markers[valueIndex]) {
+          markers[valueIndex].push({ x, y });
+        }
       }
     });
   });
@@ -66,6 +77,29 @@ export function LineChart<DomainValue extends Ordinal>({
           );
         })}
       </g>
+      {showMarkers ? (
+        <g>
+          {markers.map((series, index) => {
+            const cssColor = `var(--chart-color-${index}, currentcolor)`;
+
+            return (
+              <Fragment key={index}>
+                {series.map((point, index) => {
+                  return (
+                    <circle
+                      key={index}
+                      r={3.5}
+                      cx={point.x}
+                      cy={point.y}
+                      style={{ fill: cssColor, stroke: "none" }}
+                    />
+                  );
+                })}
+              </Fragment>
+            );
+          })}
+        </g>
+      ) : null}
       {gradient && (
         <g className={className} /*filter="url(#noise)"*/>
           {paths.map((path, index) => {

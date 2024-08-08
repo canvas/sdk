@@ -22,6 +22,7 @@ export function Chart({
   y,
   sizes,
   type,
+  svgClassName,
   width: argWidth,
   height = 300,
   options = {},
@@ -30,6 +31,7 @@ export function Chart({
   y: TableColumn;
   sizes?: number[];
   type: "line" | "bar" | "bubble";
+  svgClassName?: string;
   width?: number;
   height?: number;
   options?: ChartOptions;
@@ -84,7 +86,7 @@ export function Chart({
 
   return (
     <div ref={sizeDivRef} className="w-full flex-1">
-      <svg width={width} height={height}>
+      <svg width={width} height={height} className={svgClassName}>
         {type === "line" && (
           <g style={{ stroke: "currentColor" }}>
             <LineChart
