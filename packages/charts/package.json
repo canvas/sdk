@@ -1,6 +1,6 @@
 {
   "name": "@canvas-sdk/charts",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "repository": {
     "url": "git+https://github.com/canvas/sdk.git",
     "directory": "packages/charts"

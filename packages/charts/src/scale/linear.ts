@@ -53,7 +53,7 @@ export function numberScale(
         }
     }
 
-    const tickCount = Math.min(simpleAxisThreshold, domain.length);
+    const tickCount = 5;
 
     let tickMax = domainMax;
     if (lastTick === 'trim' && domain.length > simpleAxisThreshold) {
