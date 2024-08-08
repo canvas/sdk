@@ -50,7 +50,6 @@ export function dateTimeScale(
   bandWidth = Math.max(2, bandWidth);
 
   function size(domainValue: Date) {
-    console.log({ domainValue, domainMin, domainWidth });
     const domainPos =
       (domainValue.getTime() - (domainMin?.getTime() ?? 0)) / domainWidth;
     return domainPos * (rangeWidth - bandWidth);
