@@ -63,7 +63,6 @@ export function LineChart<DomainValue extends Ordinal>({
       <g
         className={className}
         style={{
-          filter: "drop-shadow(0px 0px 16px currentColor)",
           strokeWidth: 2,
           stroke: "currentColor",
           fill: "none",
