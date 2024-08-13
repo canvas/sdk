@@ -3,7 +3,8 @@ import { Ordinal } from "./lib/types";
 export type ValueFormat =
   | { type: "decimal" }
   | { type: "currency"; currency: string; notation?: "standard" | "compact" }
-  | { type: "percent" };
+  | { type: "percent" }
+  | { type: "datetime"; year?: "numeric"; month?: "short"; day?: "numeric" };
 
 export function formatValue(
   value: Ordinal,
@@ -11,10 +12,19 @@ export function formatValue(
   locale?: Intl.LocalesArgument
 ): string {
   if (value instanceof Date) {
+    const fmt =
+      format.type === "datetime"
+        ? format
+        : ({
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+          } as const);
+
     return Intl.DateTimeFormat(locale, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
+      year: fmt.year,
+      month: fmt.month,
+      day: fmt.day,
     }).format(value);
   }
 
@@ -37,5 +47,11 @@ export function formatValue(
       }).format(value);
     case "percent":
       return Intl.NumberFormat(locale, { style: "percent" }).format(value);
+    case "datetime":
+      return Intl.DateTimeFormat(locale, {
+        year: format.year,
+        month: format.month,
+        day: format.day,
+      }).format(value);
   }
 }
