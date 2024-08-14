@@ -37,7 +37,7 @@ export function BubbleChart<DomainValue extends Ordinal>({
 
         return (
           <circle
-            cx={10 + x}
+            cx={x}
             cy={y}
             r={bubbleDiameter / 2}
             style={{ opacity: 0.6 }}

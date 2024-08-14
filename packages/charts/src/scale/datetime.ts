@@ -3,8 +3,11 @@ import { Scale } from "../lib/types";
 
 export function dateTimeScale(
   domain: Date[],
-  range: [number, number]
+  range: [number, number],
+  options?: { hugContainer?: boolean }
 ): Scale<Date> | null {
+  const hugContainer = options?.hugContainer ?? false;
+
   const sortedDomain = [...domain];
   sortedDomain.sort((a, b) => a.getTime() - b.getTime());
 
@@ -88,11 +91,11 @@ export function dateTimeScale(
   function size(domainValue: Date) {
     const domainPos =
       (domainValue.getTime() - (domainMin?.getTime() ?? 0)) / domainWidth;
-    return domainPos * (rangeWidth - bandWidth);
+    return domainPos * (rangeWidth - (hugContainer ? 0 : bandWidth));
   }
 
   function position(domainValue: Date) {
-    return size(domainValue) + rangeMin;
+    return size(domainValue) + rangeMin - (hugContainer ? bandWidth / 2 : 0);
   }
 
   function midPoint(domainValue: Date) {

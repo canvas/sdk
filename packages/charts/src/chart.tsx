@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { dateTimeScale } from "./scale/datetime";
 import { linearScale } from "./scale/linear";
 import { LineChart } from "./line";
@@ -10,12 +10,29 @@ import { XAxis, YAxis } from "./axis";
 import { useElementWidth } from "./lib/responsive";
 import { BubbleChart } from "./bubble";
 
+export type Padding =
+  | {
+      top?: number;
+      bottom?: number;
+      left?: number;
+      right?: number;
+      vertical?: number;
+      horizontal?: number;
+    }
+  | number;
+
 export type ChartOptions = {
   locale?: Intl.LocalesArgument;
   showAxis?: boolean;
+  svgPadding?: Padding;
+  hugContainer?: boolean;
 };
 
-type TableColumn = any; /* TODO */
+/* TODO: this type is kinda bad, will fix once everything stabilizes */
+type TableColumn =
+  | unknown[]
+  | { data: unknown[] }
+  | { fetch: () => Promise<unknown[]> };
 
 export function Chart({
   x,
@@ -47,21 +64,24 @@ export function Chart({
 
   const width = argWidth !== undefined ? argWidth : Math.max(200, parentWidth);
 
+  const padding = paddingRect(options.svgPadding ?? 0);
+
   const xAxisHeight = showAxis ? 24 : 0;
 
-  const topMargin = showAxis ? 24 : 0;
-  const bottomMargin = showAxis ? 4 : 0;
+  const topMargin = padding.top + (showAxis ? 24 : 0);
+  const bottomMargin = padding.bottom + (showAxis ? 4 : 0);
 
-  const planeLeft = yAxisTextWidth + yAxisMargin;
+  const planeLeft = yAxisTextWidth + yAxisMargin + padding.left;
   const yAxisWidth = yAxisTextWidth + yAxisMargin;
-  const planeRight = width;
+  const planeRight = width - padding.right;
 
   const planeTop = topMargin;
   const planeBottom = height - xAxisHeight - bottomMargin;
 
-  const data = { x, y };
+  const xData = useData(x);
+  const yData = useData(y);
 
-  if (!data.x || !data.y) {
+  if (!xData || !yData) {
     return (
       <div ref={sizeDivRef} className="w-full flex-1">
         <div style={{ height }}>Loading...</div>
@@ -70,12 +90,18 @@ export function Chart({
   }
 
   let xScale;
-  if (data.x?.[0] instanceof Date) {
-    xScale = dateTimeScale(data.x as Date[], [planeLeft, planeRight]);
+  if (xData?.[0] instanceof Date) {
+    xScale = dateTimeScale(xData as Date[], [planeLeft, planeRight], {
+      hugContainer: options.hugContainer,
+    });
+  } else if (typeof xData?.[0] === "number") {
+    xScale = linearScale(xData as number[], [planeLeft, planeRight], {
+      lastTick: "max",
+    });
   } else {
-    xScale = categoricalScale(data.x as any, [planeLeft, planeRight]);
+    xScale = categoricalScale(xData as any, [planeLeft, planeRight]);
   }
-  const yScale = linearScale(data.y as number[], [planeBottom, planeTop], {
+  const yScale = linearScale(yData as number[], [planeBottom, planeTop], {
     extendToZero: true,
     lastTick: "extend",
   });
@@ -93,9 +119,9 @@ export function Chart({
               xScale={xScale as any}
               yScale={yScale}
               data={
-                data.x.map((x: any, index: number) => ({
+                xData.map((x: any, index: number) => ({
                   x,
-                  y: data.y?.[index],
+                  y: yData?.[index],
                 })) as any
               }
             />
@@ -108,9 +134,9 @@ export function Chart({
               xScale={xScale as any}
               yScale={yScale}
               data={
-                data.x.map((x: any, index: number) => ({
+                xData.map((x: any, index: number) => ({
                   x,
-                  y: data.y?.[index],
+                  y: yData?.[index],
                 })) as any
               }
             />
@@ -124,9 +150,9 @@ export function Chart({
               yScale={yScale}
               sizes={sizes}
               data={
-                data.x.map((x: any, index: number) => ({
+                xData.map((x: any, index: number) => ({
                   x,
-                  y: data.y?.[index],
+                  y: yData?.[index],
                 })) as any
               }
             />
@@ -153,4 +179,40 @@ export function Chart({
       </svg>
     </div>
   );
+}
+
+function useData(axis: TableColumn) {
+  const [_data, setData] = useState<unknown[] | undefined>(undefined);
+
+  useEffect(() => {
+    if ("fetch" in axis) {
+      (async () => {
+        const fetchedData = await axis.fetch();
+        setData(fetchedData);
+      })();
+    }
+  }, [axis]);
+
+  if (Array.isArray(axis)) {
+    return axis;
+  } else if ("data" in axis) {
+    return axis.data;
+  } else if ("fetch" in axis) {
+    return _data;
+  } else {
+    return undefined;
+  }
+}
+
+function paddingRect(value: Padding) {
+  if (typeof value === "number") {
+    return { left: value, right: value, top: value, bottom: value };
+  } else {n
+    return {
+      left: value.left ?? value.horizontal ?? 0,
+      right: value.right ?? value.horizontal ?? 0,
+      top: value.top ?? value.vertical ?? 0,
+      bottom: value.bottom ?? value.vertical ?? 0,
+    };
+  }
 }
