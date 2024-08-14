@@ -48,7 +48,9 @@ export function numberScale(
 
   if (Array.isArray(domain?.[0])) {
     sortedDomain = [
-      ...domain.map((t) => t.reduce((partialSum, a) => partialSum + a, 0)),
+      ...domain.map((t) =>
+        (t as any as number[]).reduce((partialSum, a) => partialSum + a, 0)
+      ),
     ];
   } else {
     sortedDomain = [...domain];
