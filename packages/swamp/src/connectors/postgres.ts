@@ -2,6 +2,8 @@ import { Client } from "pg";
 import { z } from "zod";
 import { Inserts, Loader, LoaderResponse } from "../core/types";
 import { err, ok, Result } from "neverthrow";
+import { sshProxy } from "./postgres/proxy";
+import { ConnectionOptions } from "tls";
 
 const FETCH_LIMIT = 1000;
 
@@ -11,12 +13,20 @@ export const Cursor = z.object({
 });
 export type Cursor = z.infer<typeof Cursor>;
 
+const TunnelSecrets = z.object({
+  host: z.string(),
+  port: z.number(),
+  user: z.string(),
+  privateKey: z.string(),
+});
+
 export const Secrets = z.object({
   host: z.string(),
   port: z.number(),
   database: z.string(),
   user: z.string(),
   password: z.string(),
+  sshTunnel: TunnelSecrets.optional(),
 });
 export type Secrets = z.infer<typeof Secrets>;
 
@@ -39,28 +49,22 @@ const getPrimaryKey = async (
   client: Client,
   tableName: string
 ): Promise<Result<string[], string>> => {
-  try {
-    const res = await client.query(
-      `
+  const res = await client.query(
+    `
 	SELECT a.attname AS column_name
 	FROM pg_index i
 	JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
 	WHERE i.indrelid = $1::regclass AND i.indisprimary
 	`,
-      [tableName]
-    );
-    if (res.rows.length === 0) {
-      return err(`No primary key found for table ${tableName}`);
-    }
-    if (res.rows.length > 1) {
-      console.warn(`Multiple primary keys found for table ${tableName}`);
-      return err(`Multiple primary keys found for table ${tableName}`);
-    }
-    return ok(res.rows.map((row) => row.column_name));
-  } catch (error) {
-    console.error(`Error fetching primary key for table ${tableName}:`, error);
-    throw error;
+    [tableName]
+  );
+  if (res.rows.length === 0) {
+    return err(`No primary key found for table ${tableName}`);
   }
+  if (res.rows.length > 1) {
+    return err(`Multiple primary keys found for table ${tableName}`);
+  }
+  return ok(res.rows.map((row) => row.column_name));
 };
 
 const getTableData = async (
@@ -87,10 +91,12 @@ const getTableData = async (
       ? `SELECT *, xmin::text::bigint FROM public.${tableName} WHERE xmin::text::bigint > $1 order by xmin::text::bigint limit ${FETCH_LIMIT}`
       : `SELECT *, xmin::text::bigint FROM public.${tableName} order by xmin::text::bigint limit ${FETCH_LIMIT}`;
 
+    console.log("running query", query);
     const res = await client.query({
       text: query,
       values: xmin ? [xmin] : [],
     });
+    console.log("done");
     return res.rows;
   } catch (error) {
     console.error(`Error fetching data from ${tableName}:`, error);
@@ -160,17 +166,86 @@ async function getRecords(
   };
 }
 
+async function getClient(
+  secrets: Secrets,
+  config?: PostgresConfig
+): Promise<Client> {
+  const { host, port, database, user, password, sshTunnel } = secrets;
+  if (sshTunnel) {
+    const [proxyHost, proxyPort] = await sshProxy(
+      host,
+      port,
+      sshTunnel.host,
+      sshTunnel.port,
+      sshTunnel.user,
+      sshTunnel.privateKey,
+      (error) => {
+        console.error(`Error setting up proxy connection: ${error}`);
+      }
+    );
+    return new Client({
+      host: proxyHost,
+      port: proxyPort,
+      database,
+      user,
+      password,
+    });
+  }
+  if (config?.ssl) {
+    return new Client({
+      host,
+      port,
+      database,
+      user,
+      password,
+      ssl: config.ssl,
+    });
+  }
+  return new Client({
+    host,
+    port,
+    database,
+    user,
+    password,
+  });
+}
+
+export type PostgresConfig = {
+  ssl?: boolean | ConnectionOptions;
+  includeTables?: string[];
+  initialXmin?: Record<string, string>;
+};
+
+export function runPostgresWithConfig(config: PostgresConfig) {
+  const generatedFunction = (
+    secrets: Secrets | null,
+    cursor: Cursor | null
+  ) => {
+    return runPostgres(secrets, cursor, config);
+  };
+
+  generatedFunction.cursor = Cursor;
+  generatedFunction.secrets = Secrets;
+  generatedFunction satisfies Loader<Secrets, Cursor>;
+
+  return generatedFunction as typeof generatedFunction &
+    Loader<Secrets, Cursor>;
+}
+
 export async function runPostgres(
   secrets: Secrets | null,
-  cursor: Cursor | null
+  cursor: Cursor | null,
+  config?: PostgresConfig
 ): Promise<LoaderResponse<Cursor>> {
   if (!secrets) throw new Error("Secrets are required");
-  const { host, port, database, user, password } = secrets;
-  const client = new Client({ host, port, database, user, password });
+  const client = await getClient(secrets, config);
   await client.connect();
 
   try {
-    const tableNames = await getTableNames(client);
+    const _tableNames = await getTableNames(client);
+    const tableNames = config?.includeTables
+      ? _tableNames.filter((table) => config.includeTables?.includes(table))
+      : _tableNames;
     if (tableNames.length === 0)
       throw new Error("No tables found in the database");
 

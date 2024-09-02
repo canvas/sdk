@@ -42,7 +42,7 @@ export class LoaderExecutor<SecretsType, CursorType> extends BaseTransformer {
   async runLoaderLoop() {
     while (true) {
       await this.maybeRun(false);
-      await sleep(1000 * 60 * 5);
+      await sleep(1000);
       continue;
     }
   }
@@ -73,7 +73,11 @@ export class LoaderExecutor<SecretsType, CursorType> extends BaseTransformer {
     if (!cursorRaw) return null;
     const cursor = this.loader.cursor.safeParse(cursorRaw);
     if (cursor.error) {
-      throw new Error("Cursor did not match schema");
+      throw new Error(
+        `Cursor ${JSON.stringify(cursorRaw)} did not match schema: ${
+          cursor.error.message
+        }`
+      );
     }
     return cursor.data as CursorType;
   }

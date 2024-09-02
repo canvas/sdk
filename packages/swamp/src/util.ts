@@ -57,35 +57,6 @@ export function createS3SecretStatement(credentials: S3Credentials): string {
   `;
 }
 
-export async function checkIfFileExists(
-  credentials: S3Credentials,
-  fileName: string
-): Promise<boolean> {
-  const s3Client = new S3Client({
-    region: credentials.region,
-    credentials: {
-      accessKeyId: credentials.keyId,
-      secretAccessKey: credentials.secret,
-    },
-  });
-  const params = {
-    Bucket: credentials.bucket,
-    Key: fileName,
-  };
-  try {
-    await s3Client.send(new HeadObjectCommand(params));
-    return true;
-  } catch (error: any) {
-    if (error.name === "NotFound") {
-      console.log("File does not exist.");
-      return false;
-    } else {
-      console.error("An error occurred:", error);
-      throw error;
-    }
-  }
-}
-
 export async function fetchFileFromS3(
   credentials: S3Credentials,
   fileName: string
@@ -105,13 +76,13 @@ export async function fetchFileFromS3(
     const data = await s3Client.send(new GetObjectCommand(params));
     if (data.Body instanceof Readable) {
       await pipelineAsync(data.Body, createWriteStream(fileName));
-      console.log("File downloaded successfully to", fileName);
       return fileName;
     } else {
       console.error("Unexpected data.Body type");
       return null;
     }
   } catch (error) {
+    console.error(`Error fetching file from S3: ${error}`);
     return null;
   }
 }
@@ -137,9 +108,6 @@ export async function uploadFileToS3(
 
   try {
     await s3Client.send(new PutObjectCommand(params));
-    console.log(
-      `File uploaded successfully to ${credentials.bucket}/${filePath}`
-    );
     return ok(`s3://${credentials.bucket}/${filePath}`);
   } catch (error) {
     console.error("Error uploading file to S3:", error);

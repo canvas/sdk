@@ -146,6 +146,8 @@ type StagedFile = {
   columnSchema: ColumnsSchema;
 };
 
+type CreateRecordsQueue = { filePath: string };
+
 type WriteQueue = { stagedFile: StagedFile };
 
 export class InMemoryDuckDb implements SqlEngine {
