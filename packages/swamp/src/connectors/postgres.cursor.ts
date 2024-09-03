@@ -44,12 +44,10 @@ export class PostgresCursor extends PostgresBase<typeof Cursor> {
     cursorPosition: CursorPosition
   ): Promise<Record<string, any>[]> {
     try {
-      this.setupParsers(client);
-
       const { cursorColumn, currentCursorValue } = cursorPosition;
 
       const query = currentCursorValue
-        ? `SELECT * FROM public.${tableName} WHERE ${cursorColumn} >= $1 order by ${cursorColumn} limit ${FETCH_LIMIT}`
+        ? `SELECT * FROM public.${tableName} WHERE ${cursorColumn} > $1 order by ${cursorColumn} limit ${FETCH_LIMIT}`
         : `SELECT * FROM public.${tableName} order by ${cursorColumn} limit ${FETCH_LIMIT}`;
 
       const res = await client.query({
@@ -187,6 +185,7 @@ export class PostgresCursor extends PostgresBase<typeof Cursor> {
   ): Promise<LoaderResponse<Cursor>> {
     if (!secrets) throw new Error("Secrets are required");
     const client = await this.getClient(secrets);
+    let isDone = false;
 
     try {
       const {
@@ -194,6 +193,8 @@ export class PostgresCursor extends PostgresBase<typeof Cursor> {
         hasMore,
         cursor: newCursor,
       } = await this.getRecords(cursor, client);
+      isDone = !hasMore;
+
       return {
         type: "success",
         inserts,
@@ -201,7 +202,8 @@ export class PostgresCursor extends PostgresBase<typeof Cursor> {
         hasMore,
       };
     } finally {
-      if (!this.client) {
+      if (isDone) {
+        this.client = null;
         await client.end();
       }
     }

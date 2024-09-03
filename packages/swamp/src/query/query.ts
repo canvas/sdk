@@ -21,6 +21,16 @@ import { all, DUCKDB_KEYWORDS, prepare, statementAll } from "./duckdb.util";
 import { InMemoryLock } from "../lock";
 import { err, ok, Result } from "neverthrow";
 import { MessageBroker } from "../messages/message.broker";
+import { serialize, deserialize } from "v8";
+
+type QueuedWrite = {
+  folderLocation: string;
+  dataType: "parquet";
+  tableName: string;
+  schemaName: string;
+  columnSchema: ColumnsSchema;
+  queuedFilePath: string;
+};
 
 export interface SqlEngine {
   querySql(query: string): Promise<QueryResult>;
@@ -121,34 +131,7 @@ async function createBatchTable(
   });
 }
 
-function mergeSchemas(
-  existingSchema: ColumnsSchema,
-  newSchema: ColumnsSchema
-): ColumnsSchema {
-  // todo: handle case where column type changes
-  const onlyInNew: ColumnsSchema = Object.fromEntries(
-    Object.entries(newSchema).filter(
-      ([column]) => existingSchema[column] === undefined
-    )
-  );
-
-  return {
-    ...existingSchema,
-    ...onlyInNew,
-  };
-}
-
-type StagedFile = {
-  schemaName: string;
-  tableName: string;
-  filePath: string;
-  writeFolder: string;
-  columnSchema: ColumnsSchema;
-};
-
-type CreateRecordsQueue = { filePath: string };
-
-type WriteQueue = { stagedFile: StagedFile };
+type CreateRecords = { buffer: Buffer };
 
 export class InMemoryDuckDb implements SqlEngine {
   db: Database | null;
@@ -161,7 +144,9 @@ export class InMemoryDuckDb implements SqlEngine {
 
   store: TableStoreInterface;
 
-  uploadQueue: WriteQueue[] = [];
+  newRecordsQueue: CreateRecords[] = [];
+
+  uploadQueue: QueuedWrite[] = [];
 
   constructor(store: TableStoreInterface) {
     this.db = null;
@@ -178,22 +163,39 @@ export class InMemoryDuckDb implements SqlEngine {
     messageBroker.subscribeToNewRecords(this.handleCreateRecords.bind(this));
   }
 
+  async handleCreateRecords(event: CreateRecordsEvent): Promise<void> {
+    const buffer = serialize(event);
+    this.newRecordsQueue.push({ buffer });
+  }
+
+  dequeueNewRecords(): CreateRecords | null {
+    if (this.newRecordsQueue.length === 0) {
+      return null;
+    }
+    return this.newRecordsQueue.shift()!;
+  }
+
   async runUploadLoop() {
     while (true) {
-      const schemaTable = this.dequeueWrite();
-      if (!schemaTable) {
+      const newRecords = this.dequeueNewRecords();
+      if (newRecords) {
+        const inserts: CreateRecordsEvent = deserialize(newRecords.buffer);
+        await this.writeRecords(inserts.inserts);
+      }
+      const queuedWrite = this.dequeueWrite();
+      if (!queuedWrite) {
         await sleep(1000);
         continue;
       }
-      await this.commitTableToStorage(schemaTable.stagedFile);
+      await this.commitTableToStorage(queuedWrite);
     }
   }
 
-  queueWrite(stagedFile: StagedFile) {
-    this.uploadQueue.push({ stagedFile });
+  queueWrite(write: QueuedWrite) {
+    this.uploadQueue.push(write);
   }
 
-  dequeueWrite(): WriteQueue | null {
+  dequeueWrite(): QueuedWrite | null {
     if (this.uploadQueue.length === 0) {
       return null;
     }
@@ -201,36 +203,36 @@ export class InMemoryDuckDb implements SqlEngine {
   }
 
   async commitTableToStorage(
-    stagedFile: StagedFile
+    write: QueuedWrite
   ): Promise<Result<void, string>> {
+    const {
+      folderLocation,
+      tableName,
+      schemaName,
+      columnSchema,
+      queuedFilePath,
+    } = write;
+
+    let dataLocation: DataLocation = {
+      location: folderLocation,
+      tableName,
+      schemaName,
+      columnSchema,
+      dataType: "parquet" as const,
+      fileLocation: "local",
+    };
+
     if (this.credentials) {
-      const tryUpload = await uploadFileToS3(
-        this.credentials,
-        stagedFile.filePath
-      );
+      const tryUpload = await uploadFileToS3(this.credentials, queuedFilePath);
+      fs.unlinkSync(queuedFilePath);
       if (tryUpload.isErr()) {
         console.error(`Error uploading to S3: ${tryUpload.error}`);
         return err(tryUpload.error);
       }
+      dataLocation.fileLocation = "s3";
+      dataLocation.location = `s3://${this.credentials.bucket}/${folderLocation}`;
     }
-
-    const { schemaName, tableName, columnSchema, writeFolder } = stagedFile;
     const existingTable = await this.store.getTable(schemaName, tableName);
-
-    const newColumnSchema =
-      existingTable === null
-        ? columnSchema
-        : mergeSchemas(existingTable.columnSchema, columnSchema);
-
-    const dataLocation: DataLocation = {
-      location: writeFolder,
-      dataType: "parquet" as const,
-      tableName,
-      schemaName,
-      columnSchema: newColumnSchema,
-      fileLocation: "local",
-    };
-
     if (existingTable === null) {
       await this.addNewTable(dataLocation);
     } else {
@@ -248,10 +250,6 @@ export class InMemoryDuckDb implements SqlEngine {
     return `${schemaFilePath}/${tableName}`;
   }
 
-  async handleCreateRecords(event: CreateRecordsEvent): Promise<void> {
-    await this.writeRecords(event.inserts);
-  }
-
   async writeRecords(inserts: LoaderInserts): Promise<void> {
     await this.writeLock.acquire();
     try {
@@ -263,12 +261,8 @@ export class InMemoryDuckDb implements SqlEngine {
           console.log("no records");
           continue;
         }
-        const existingTable = await this.store.getTable(schemaName, tableName);
 
-        const writeFolder =
-          existingTable === null
-            ? this.getLocalWriteFolder(schemaName, tableName)
-            : existingTable.location;
+        const writeFolder = this.getLocalWriteFolder(schemaName, tableName);
         fs.mkdirSync(writeFolder, { recursive: true });
 
         const fileName = this.getFileName();
@@ -290,13 +284,16 @@ export class InMemoryDuckDb implements SqlEngine {
           `Wrote ${parquetFile.value.recordCount} records to table ${schemaName}.${tableName}`
         );
 
-        this.queueWrite({
-          schemaName,
+        const queuedWrite: QueuedWrite = {
+          folderLocation: writeFolder,
+          dataType: "parquet" as const,
           tableName,
-          filePath: writePath,
-          writeFolder,
+          schemaName,
           columnSchema,
-        });
+          queuedFilePath: parquetFile.value.filePath,
+        };
+
+        this.queueWrite(queuedWrite);
       }
     } finally {
       this.writeLock.release();
@@ -305,7 +302,6 @@ export class InMemoryDuckDb implements SqlEngine {
 
   withS3Credentials(credentials: S3Credentials): InMemoryDuckDb {
     this.credentials = { ...credentials, type: "s3" };
-    console.log(`Using s3 bucket: ${credentials.bucket}`);
     return this;
   }
 

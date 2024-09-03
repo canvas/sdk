@@ -73,30 +73,14 @@ const getTableData = async (
   xmin?: number
 ): Promise<Record<string, any>[]> => {
   try {
-    const jsonParser = client.getTypeParser(114); // OID 114 is for JSON
-    const jsonbParser = client.getTypeParser(3802); // OID 3802 is for JSONB
-    const arrayParser = client.getTypeParser(1007); // OID 1007 is for integer arrays, adjust as necessary
-
-    client.setTypeParser(114, (value: string) =>
-      JSON.stringify(jsonParser(value))
-    );
-    client.setTypeParser(3802, (value: string) =>
-      JSON.stringify(jsonbParser(value))
-    );
-    client.setTypeParser(1007, (value: string) =>
-      JSON.stringify(arrayParser(value))
-    );
-
     const query = xmin
       ? `SELECT *, xmin::text::bigint FROM public.${tableName} WHERE xmin::text::bigint > $1 order by xmin::text::bigint limit ${FETCH_LIMIT}`
       : `SELECT *, xmin::text::bigint FROM public.${tableName} order by xmin::text::bigint limit ${FETCH_LIMIT}`;
 
-    console.log("running query", query);
     const res = await client.query({
       text: query,
       values: xmin ? [xmin] : [],
     });
-    console.log("done");
     return res.rows;
   } catch (error) {
     console.error(`Error fetching data from ${tableName}:`, error);

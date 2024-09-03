@@ -37,12 +37,7 @@ export async function addDuckDBTables(
       return `
       CREATE SCHEMA IF NOT EXISTS ${schemaName};
       CREATE OR REPLACE VIEW ${tableSchema} AS 
-      SELECT * FROM read_parquet('${
-        table.location
-      }/*.parquet', union_by_name = true)
-      QUALIFY ROW_NUMBER() OVER (PARTITION BY ${primaryKeys.join(
-        ","
-      )} ORDER BY _swamp_updated_at DESC) = 1;`;
+      SELECT * FROM read_parquet('${table.location}/*.parquet', union_by_name = true)`;
     })
     .join(";");
   const result = await all(db, createTableStatements);

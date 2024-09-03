@@ -53,6 +53,7 @@ export class Swamp {
   }
 
   async initialize(): Promise<void> {
+    console.log("initialize");
     await this.sqlEngine.initialize(this.messageBroker);
     this.runChangedTransformer();
     const app = initializeServer(this);

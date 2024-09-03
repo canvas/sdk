@@ -1,6 +1,6 @@
 {
   "name": "@canvas-sdk/swamp",
-  "version": "0.1.0",
+  "version": "0.2.4",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsc --watch",

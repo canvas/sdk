@@ -284,7 +284,6 @@ export class S3SQLiteStore implements Store {
   }
 
   uploadToS3() {
-    console.log("Write to S3");
     uploadFileToS3(this.credentials, this.fileName);
   }
 
