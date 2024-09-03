@@ -89,7 +89,8 @@ export async function fetchFileFromS3(
 
 export async function uploadFileToS3(
   credentials: S3Credentials,
-  filePath: string
+  filePath: string,
+  key: string
 ): Promise<Result<string, string>> {
   const s3Client = new S3Client({
     region: credentials.region,
@@ -102,13 +103,13 @@ export async function uploadFileToS3(
 
   const params = {
     Bucket: credentials.bucket,
-    Key: filePath,
+    Key: key,
     Body: fileStream,
   };
 
   try {
     await s3Client.send(new PutObjectCommand(params));
-    return ok(`s3://${credentials.bucket}/${filePath}`);
+    return ok(`s3://${credentials.bucket}/${key}`);
   } catch (error) {
     console.error("Error uploading file to S3:", error);
     return err(`Error uploading file to S3: ${error}`);

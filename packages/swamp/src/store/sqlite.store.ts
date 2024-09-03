@@ -284,7 +284,7 @@ export class S3SQLiteStore implements Store {
   }
 
   uploadToS3() {
-    uploadFileToS3(this.credentials, this.fileName);
+    uploadFileToS3(this.credentials, this.fileName, this.fileName);
   }
 
   async writeRemote(): Promise<void> {

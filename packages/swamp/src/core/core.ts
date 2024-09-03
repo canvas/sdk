@@ -1,6 +1,6 @@
 import { SecretStore } from "../secrets/secret.store";
-import { Store } from "../store/sqlite.store";
-import { SqlEngine } from "../query/query";
+import { S3SQLiteStore, SQLiteStore, Store } from "../store/sqlite.store";
+import { InMemoryDuckDb, SqlEngine } from "../query/query";
 import { LoaderExecutor } from "../loader/loader";
 import {
   TransformerInputEvent,
@@ -8,54 +8,135 @@ import {
   BaseTransformer,
   TransformType,
   ReadDataLocation,
+  S3Credentials,
 } from "./types";
 import { TransformerExecutor } from "../transformer/transformer";
-import path from "path";
 import { InMemoryBroker } from "../messages/in.memory.broker";
 import { Server } from "http";
 import { initializeServer } from "../server/server";
+import { LocalBackend, S3Backend, Writer } from "../writer/writer";
+import { MessageBroker } from "../messages/message.broker";
 
 const port = process.env.PORT || 9001;
 
+type LoaderExtras = {
+  rateLimitMs: number;
+  cadenceSeconds: number;
+};
+type BuilderLoader<Secret, Cursor> = {
+  loader: Loader<Secret, Cursor>;
+  uniqueId: string;
+  extras?: LoaderExtras;
+};
+
+export class SwampBuilder {
+  secrets: SecretStore | null = null;
+  s3Credentials: S3Credentials | null = null;
+  queryEnabled: boolean = false;
+  loaders: BuilderLoader<any, any>[] = [];
+
+  withSecretStore(secrets: SecretStore): SwampBuilder {
+    this.secrets = secrets;
+    return this;
+  }
+  withS3Credentials(s3CredentialKey: string): SwampBuilder {
+    if (!this.secrets) {
+      throw new Error("Must set a secret store");
+    }
+    const s3Credentials = this.secrets.getS3Credentials(s3CredentialKey);
+    this.s3Credentials = s3Credentials;
+    return this;
+  }
+  withQueryEngine(): SwampBuilder {
+    this.queryEnabled = true;
+    return this;
+  }
+  withLoader(
+    loader: Loader<any, any>,
+    uniqueId: string,
+    extras?: LoaderExtras
+  ): SwampBuilder {
+    this.loaders.push({ loader, uniqueId, extras });
+    return this;
+  }
+  initialSwamp(): Swamp {
+    if (!this.secrets) {
+      throw new Error("Must set a secret store");
+    }
+    const messageBroker = new InMemoryBroker();
+    if (this.s3Credentials) {
+      const s3Credentials = this.s3Credentials;
+      const store = new S3SQLiteStore(s3Credentials);
+      const sqlEngine = this.queryEnabled
+        ? new InMemoryDuckDb().withS3Credentials(s3Credentials)
+        : null;
+      const dataBackend = new S3Backend(s3Credentials);
+      const writer = new Writer(store, dataBackend, messageBroker);
+      const swamp = new Swamp(
+        store,
+        this.secrets,
+        messageBroker,
+        writer,
+        sqlEngine
+      );
+      return swamp;
+    } else {
+      const store = new SQLiteStore("local.db");
+      const sqlEngine = new InMemoryDuckDb();
+      const dataBackend = new LocalBackend();
+      const writer = new Writer(store, dataBackend, messageBroker);
+      const swamp = new Swamp(
+        store,
+        this.secrets,
+        messageBroker,
+        writer,
+        sqlEngine
+      );
+      return swamp;
+    }
+  }
+  build(): Swamp {
+    const swamp = this.initialSwamp();
+    for (const loader of this.loaders) {
+      swamp
+        .addLoader(loader.loader, loader.uniqueId, loader.extras?.rateLimitMs)
+        .withCadence(loader.extras?.cadenceSeconds || 60 * 15);
+    }
+    swamp.initialize();
+    return swamp;
+  }
+}
+
 export class Swamp {
   store: Store;
-
   secretStore: SecretStore;
-
   transformers: BaseTransformer[];
-
-  sqlEngine: SqlEngine;
-
-  messageBroker = new InMemoryBroker();
-
+  sqlEngine: SqlEngine | null = null;
+  messageBroker: MessageBroker;
+  writer: Writer;
   server: Server | null = null;
 
-  constructor(store: Store, secretStore: SecretStore, sqlEngine: SqlEngine) {
+  constructor(
+    store: Store,
+    secretStore: SecretStore,
+    messageBroker: MessageBroker,
+    writer: Writer,
+    sqlEngine: SqlEngine | null
+  ) {
     this.store = store;
     this.secretStore = secretStore;
     this.transformers = [];
+    this.messageBroker = messageBroker;
+    this.writer = writer;
     this.sqlEngine = sqlEngine;
-  }
-
-  runChangedTransformer(): string | undefined {
-    const args = process.argv.slice(2);
-    if (args.length === 0) {
-      return;
-    }
-    const changedRelativePath = args[0];
-    const transformer = this.transformers.find(
-      (tf) => tf.filePath === changedRelativePath
-    );
-    if (transformer) {
-      this.runTransformer(transformer.uniqueId, { type: "run", force: true });
-      return transformer.uniqueId;
-    }
   }
 
   async initialize(): Promise<void> {
     console.log("initialize");
-    await this.sqlEngine.initialize(this.messageBroker);
-    this.runChangedTransformer();
+    if (this.sqlEngine) {
+      const tables = await this.store.getTables();
+      await this.sqlEngine.initialize(tables, this.messageBroker);
+    }
     const app = initializeServer(this);
     this.server = app.listen(port, () => {
       console.log(`Listening: http://localhost:${port}`);
@@ -63,6 +144,9 @@ export class Swamp {
   }
 
   query(query: string) {
+    if (!this.sqlEngine) {
+      throw new Error("No SqlEngine installed");
+    }
     return this.sqlEngine.querySql(query);
   }
 
@@ -76,11 +160,6 @@ export class Swamp {
       uniqueId,
       transform
     );
-    if (transform.filePath) {
-      const parentDir = path.join(__dirname, "../..");
-      const relativePath = transform.filePath.replace(parentDir + "/", "");
-      transformer.setFilePath(relativePath);
-    }
     this.transformers.push(transformer);
     return transformer;
   }

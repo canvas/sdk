@@ -1,13 +1,15 @@
-import { CreateRecordsEvent } from "../core/types";
-import { MessageBroker, HandleCreateRecords } from "./message.broker";
+import { CreateRecordsEvent, DataLocation } from "../core/types";
+import {
+  MessageBroker,
+  HandleCreateRecords,
+  HandleNewDataLocation,
+} from "./message.broker";
 
 export class InMemoryBroker implements MessageBroker {
   createRecordsSubscribers: HandleCreateRecords[] = [];
+  mewDataLocationSubscribers: HandleNewDataLocation[] = [];
 
   publishNewRecords(event: CreateRecordsEvent): void {
-    console.log(
-      `Publish to ${this.createRecordsSubscribers.length} subscribers`
-    );
     for (const subscriber of this.createRecordsSubscribers) {
       subscriber(event);
     }
@@ -15,5 +17,14 @@ export class InMemoryBroker implements MessageBroker {
 
   subscribeToNewRecords(subscriber: HandleCreateRecords): void {
     this.createRecordsSubscribers.push(subscriber);
+  }
+
+  publishNewDataLocation(event: DataLocation): void {
+    for (const subscriber of this.mewDataLocationSubscribers) {
+      subscriber(event);
+    }
+  }
+  subscribeToNewDataLocation(subscriber: HandleNewDataLocation): void {
+    this.mewDataLocationSubscribers.push(subscriber);
   }
 }
