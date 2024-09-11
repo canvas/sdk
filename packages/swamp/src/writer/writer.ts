@@ -51,6 +51,7 @@ export class Writer {
         continue;
       }
       this.messageBroker.publishNewDataLocation(dataLocation.value);
+      await this.updateStore(dataLocation.value);
     }
   }
 

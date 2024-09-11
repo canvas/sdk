@@ -20,8 +20,8 @@ import { MessageBroker } from "../messages/message.broker";
 const port = process.env.PORT || 9001;
 
 type LoaderExtras = {
-  rateLimitMs: number;
-  cadenceSeconds: number;
+  rateLimitMs?: number;
+  cadenceSeconds?: number;
 };
 type BuilderLoader<Secret, Cursor> = {
   loader: Loader<Secret, Cursor>;
@@ -70,6 +70,7 @@ export class SwampBuilder {
       const sqlEngine = this.queryEnabled
         ? new InMemoryDuckDb().withS3Credentials(s3Credentials)
         : null;
+      console.log("sqlEngine", sqlEngine);
       const dataBackend = new S3Backend(s3Credentials);
       const writer = new Writer(store, dataBackend, messageBroker);
       const swamp = new Swamp(
@@ -135,7 +136,12 @@ export class Swamp {
     console.log("initialize");
     if (this.sqlEngine) {
       const tables = await this.store.getTables();
+      console.log(
+        "Initialize with tables",
+        tables.map((table) => `${table.schemaName}.${table.tableName}`)
+      );
       await this.sqlEngine.initialize(tables, this.messageBroker);
+      console.log("Initialized");
     }
     const app = initializeServer(this);
     this.server = app.listen(port, () => {

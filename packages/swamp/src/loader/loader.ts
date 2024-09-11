@@ -93,7 +93,6 @@ export class LoaderExecutor<SecretsType, CursorType> extends BaseTransformer {
 
   async maybeRun(force: boolean) {
     if (this.lock.isLocked()) {
-      console.log("Already running");
       return;
     }
     await this.lock.acquire();
