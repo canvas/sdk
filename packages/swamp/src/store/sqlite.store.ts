@@ -84,7 +84,6 @@ const SETUP_STATEMENTS = [
 ];
 
 function addTable(db: SQLiteDatabase, table: DataLocation): void {
-  // console.log('Adding table', table);
   const {
     tableName,
     schemaName,

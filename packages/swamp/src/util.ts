@@ -72,7 +72,6 @@ export async function fetchFileFromS3(
     Bucket: credentials.bucket,
     Key: fileName,
   };
-  console.log("fetch", params);
   try {
     const data = await s3Client.send(new GetObjectCommand(params));
     if (data.Body instanceof Readable) {

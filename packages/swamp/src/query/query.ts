@@ -351,7 +351,7 @@ export class DuckDbEngine implements SqlEngine {
       this.queuedWrites.delete(key);
       await this.updateStore(dataLocation.value);
     } else {
-      console.log("performWrite no queued write", key);
+      console.error("performWrite no queued write", key);
     }
   }
 
