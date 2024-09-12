@@ -5,7 +5,7 @@ import { err, ok, Result } from "neverthrow";
 import { sshProxy } from "./postgres/proxy";
 import { ConnectionOptions } from "tls";
 
-const FETCH_LIMIT = 1000;
+const FETCH_LIMIT = 5000;
 
 export const Cursor = z.object({
   currentTable: z.string(),
@@ -115,7 +115,6 @@ async function getRecords(
   }
   const previousXmin = cursor?.xminMap?.[tableName];
   const records = await getTableData(client, tableName, previousXmin);
-  console.log(`Got ${records.length} records for table ${tableName}`);
   const filteredRecords = records.map(({ xmin, ...rest }) => rest);
   const inserts: Inserts = {
     [tableName]: { primaryKeys: primaryKey.value, records: filteredRecords },

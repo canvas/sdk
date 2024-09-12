@@ -1,10 +1,6 @@
 import { Database } from "duckdb";
 import { DataLocation } from "../core/types";
-import { all } from "./duckdb.util";
-
-async function getDb(): Promise<Database> {
-  return new Database(":memory:");
-}
+import { all, generateCreateTableStatement } from "./duckdb.util";
 
 export function sanitizeDuckDb(reference: string): string {
   return reference.replaceAll("-", "_");
@@ -29,15 +25,15 @@ export async function addDuckDBTables(
     .map((table) => {
       const tableSchema = sanitizeTableSchema(table);
       const schemaName = sanitizeDuckDb(table.schemaName);
-      const primaryKeys = Object.entries(table.columnSchema)
-        .filter(([, { isPrimaryKey }]) => {
-          return isPrimaryKey === true;
-        })
-        .map(([columnName]) => columnName);
+      const createTableStatement = generateCreateTableStatement(
+        tableSchema,
+        table.columnSchema
+      );
       return `
       CREATE SCHEMA IF NOT EXISTS ${schemaName};
-      CREATE OR REPLACE VIEW ${tableSchema} AS 
-      SELECT * FROM read_parquet('${table.location}/*.parquet', union_by_name = true)`;
+      ${createTableStatement};
+      INSERT INTO ${tableSchema}
+        SELECT * FROM read_parquet('${table.location}');`;
     })
     .join(";");
   const result = await all(db, createTableStatements);
@@ -51,7 +47,7 @@ export async function initializeWithTables(
   tables: DataLocation[]
 ): Promise<Database> {
   console.log("initializeWithTables", tables);
-  const db = await getDb();
+  const db = new Database(":memory:");
   await addDuckDBTables(db, tables);
   return db;
 }

@@ -1,6 +1,6 @@
 import { SecretStore } from "../secrets/secret.store";
 import { S3SQLiteStore, SQLiteStore, Store } from "../store/sqlite.store";
-import { InMemoryDuckDb, SqlEngine } from "../query/query";
+import { DuckDbEngine, SqlEngine } from "../query/query";
 import { LoaderExecutor } from "../loader/loader";
 import {
   TransformerInputEvent,
@@ -14,7 +14,6 @@ import { TransformerExecutor } from "../transformer/transformer";
 import { InMemoryBroker } from "../messages/in.memory.broker";
 import { Server } from "http";
 import { initializeServer } from "../server/server";
-import { LocalBackend, S3Backend, Writer } from "../writer/writer";
 import { MessageBroker } from "../messages/message.broker";
 
 const port = process.env.PORT || 9001;
@@ -32,7 +31,6 @@ type BuilderLoader<Secret, Cursor> = {
 export class SwampBuilder {
   secrets: SecretStore | null = null;
   s3Credentials: S3Credentials | null = null;
-  queryEnabled: boolean = false;
   loaders: BuilderLoader<any, any>[] = [];
 
   withSecretStore(secrets: SecretStore): SwampBuilder {
@@ -45,10 +43,6 @@ export class SwampBuilder {
     }
     const s3Credentials = this.secrets.getS3Credentials(s3CredentialKey);
     this.s3Credentials = s3Credentials;
-    return this;
-  }
-  withQueryEngine(): SwampBuilder {
-    this.queryEnabled = true;
     return this;
   }
   withLoader(
@@ -67,32 +61,15 @@ export class SwampBuilder {
     if (this.s3Credentials) {
       const s3Credentials = this.s3Credentials;
       const store = new S3SQLiteStore(s3Credentials);
-      const sqlEngine = this.queryEnabled
-        ? new InMemoryDuckDb().withS3Credentials(s3Credentials)
-        : null;
-      console.log("sqlEngine", sqlEngine);
-      const dataBackend = new S3Backend(s3Credentials);
-      const writer = new Writer(store, dataBackend, messageBroker);
-      const swamp = new Swamp(
-        store,
-        this.secrets,
-        messageBroker,
-        writer,
-        sqlEngine
+      const sqlEngine = new DuckDbEngine(store).withS3Credentials(
+        s3Credentials
       );
+      const swamp = new Swamp(store, this.secrets, messageBroker, sqlEngine);
       return swamp;
     } else {
       const store = new SQLiteStore("local.db");
-      const sqlEngine = new InMemoryDuckDb();
-      const dataBackend = new LocalBackend();
-      const writer = new Writer(store, dataBackend, messageBroker);
-      const swamp = new Swamp(
-        store,
-        this.secrets,
-        messageBroker,
-        writer,
-        sqlEngine
-      );
+      const sqlEngine = new DuckDbEngine(store);
+      const swamp = new Swamp(store, this.secrets, messageBroker, sqlEngine);
       return swamp;
     }
   }
@@ -114,34 +91,24 @@ export class Swamp {
   transformers: BaseTransformer[];
   sqlEngine: SqlEngine | null = null;
   messageBroker: MessageBroker;
-  writer: Writer;
   server: Server | null = null;
 
   constructor(
     store: Store,
     secretStore: SecretStore,
     messageBroker: MessageBroker,
-    writer: Writer,
     sqlEngine: SqlEngine | null
   ) {
     this.store = store;
     this.secretStore = secretStore;
     this.transformers = [];
     this.messageBroker = messageBroker;
-    this.writer = writer;
     this.sqlEngine = sqlEngine;
   }
 
   async initialize(): Promise<void> {
-    console.log("initialize");
     if (this.sqlEngine) {
-      const tables = await this.store.getTables();
-      console.log(
-        "Initialize with tables",
-        tables.map((table) => `${table.schemaName}.${table.tableName}`)
-      );
-      await this.sqlEngine.initialize(tables, this.messageBroker);
-      console.log("Initialized");
+      await this.sqlEngine.initialize(this.messageBroker);
     }
     const app = initializeServer(this);
     this.server = app.listen(port, () => {

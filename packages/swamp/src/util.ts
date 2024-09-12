@@ -72,6 +72,7 @@ export async function fetchFileFromS3(
     Bucket: credentials.bucket,
     Key: fileName,
   };
+  console.log("fetch", params);
   try {
     const data = await s3Client.send(new GetObjectCommand(params));
     if (data.Body instanceof Readable) {
@@ -82,7 +83,7 @@ export async function fetchFileFromS3(
       return null;
     }
   } catch (error) {
-    console.error(`Error fetching file from S3: ${error}`);
+    console.error(`Error fetching file ${fileName} from S3: ${error}`);
     return null;
   }
 }
@@ -109,7 +110,7 @@ export async function uploadFileToS3(
 
   try {
     await s3Client.send(new PutObjectCommand(params));
-    return ok(`s3://${credentials.bucket}/${key}`);
+    return ok(key);
   } catch (error) {
     console.error("Error uploading file to S3:", error);
     return err(`Error uploading file to S3: ${error}`);

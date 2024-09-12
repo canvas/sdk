@@ -142,7 +142,6 @@ export class PostgresCursor extends PostgresBase<typeof Cursor> {
       tableName,
       currentCursorPosition.value
     );
-    console.log(`Got ${records.length} records for table ${tableName}`);
     const inserts: Inserts = {
       [tableName]: { primaryKeys: primaryKey.value, records },
     };

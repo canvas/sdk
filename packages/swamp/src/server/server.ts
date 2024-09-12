@@ -50,9 +50,7 @@ export function initializeServer(swamp: Swamp) {
     async (req: Request, res: Response) => {
       try {
         const query = req.query.query as string;
-        console.log("Query", query);
         const { data, columns } = await swamp.query(query);
-        console.log("data", data);
         res.json({
           type: "success",
           data,

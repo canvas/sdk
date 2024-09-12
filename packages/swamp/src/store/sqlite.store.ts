@@ -254,7 +254,7 @@ export class S3SQLiteStore implements Store {
 
   debouncedUpload: () => void;
 
-  constructor(credentials: S3Credentials, fileName: string = "swamp.db") {
+  constructor(credentials: S3Credentials, fileName: string = "local.db") {
     this.credentials = credentials;
     this.fileName = fileName;
     this.debouncedUpload = debounce(this.uploadToS3.bind(this), 1000);

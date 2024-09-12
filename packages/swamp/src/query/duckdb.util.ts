@@ -7,6 +7,13 @@ import {
   DuckDbError,
 } from "duckdb";
 import { Result, err, ok } from "neverthrow";
+import { generateRandomAlphanumeric, getTempDirectory } from "../util";
+import {
+  ColumnSchema,
+  ColumnsSchema,
+  DuckDBType,
+  LoaderInserts,
+} from "../core/types";
 
 export const DUCKDB_KEYWORDS = [
   "all",
@@ -176,4 +183,93 @@ export async function statementAll(
       }
     });
   });
+}
+
+export function escapeColumn(column: string): string {
+  return DUCKDB_KEYWORDS.includes(column.toLowerCase())
+    ? `"${column}"`
+    : column;
+}
+
+export function getColumnType(columnType: DuckDBType): string {
+  return columnType.type === "ARRAY"
+    ? `${columnType.innerType}[]`
+    : columnType.type;
+}
+
+export function generateCreateTableStatement(
+  tableName: string,
+  schema: Record<string, ColumnSchema>
+): string {
+  const columns = Object.entries(schema).map(([_columnName, columnSchema]) => {
+    const columnType = getColumnType(columnSchema.columnType);
+    const isPrimaryKey = columnSchema.isPrimaryKey ? "PRIMARY KEY" : "";
+    const columnName = escapeColumn(_columnName);
+    return `${columnName} ${columnType} ${isPrimaryKey}`.trim();
+  });
+
+  // const columnsDefinition =
+  //   columns.join(", ") + ", _swamp_updated_at TIMESTAMP";
+  const columnsDefinition = columns.join(", ");
+  return `CREATE TABLE ${tableName} (${columnsDefinition})`;
+}
+
+type BatchRow = { columns: string[]; values: string[] };
+type CreateBatchTableResult = {
+  inserts: BatchRow[];
+};
+
+function createBatchTable(
+  db: Database,
+  records: Record<string, any>[],
+  schema: Record<string, ColumnSchema>
+): CreateBatchTableResult {
+  const inserts: BatchRow[] = [];
+
+  for (const record of records) {
+    const columns: string[] = [];
+    const values: string[] = [];
+    for (const [column, value] of Object.entries(record)) {
+      if (value !== null) {
+        columns.push(escapeColumn(column));
+        values.push(value);
+      }
+    }
+    inserts.push({ columns, values });
+  }
+
+  return {
+    inserts,
+  };
+}
+
+export type StagedTable = {
+  schemaName: string;
+  tableName: string;
+  inserts: BatchRow[];
+  columnSchema: ColumnsSchema;
+};
+
+export async function stageInserts(
+  db: Database,
+  inserts: LoaderInserts
+): Promise<StagedTable[]> {
+  const queuedWrites: StagedTable[] = [];
+  for (const [tableName, batch] of Object.entries(inserts)) {
+    const { columnSchema, records, schemaName } = batch;
+    if (records.length === 0) {
+      continue;
+    }
+
+    const { inserts } = createBatchTable(db, records, columnSchema);
+
+    const queuedWrite: StagedTable = {
+      inserts,
+      columnSchema,
+      schemaName,
+      tableName,
+    };
+    queuedWrites.push(queuedWrite);
+  }
+  return queuedWrites;
 }

@@ -13,24 +13,6 @@ export type FileDataType = "json" | "parquet";
 
 export type FileLocation = "local" | "s3";
 
-export type DataLocation = {
-  dataType: FileDataType;
-  fileLocation: FileLocation;
-  location: string;
-  tableName: string;
-  schemaName: string;
-  columnSchema: Record<string, ColumnSchema>;
-};
-
-type Run = { type: "run"; force: boolean };
-
-type RecordBatch = {
-  primaryKeys: string[];
-  records: Record<string, any>[];
-};
-
-export type Inserts = Record<string, RecordBatch>;
-
 export const DuckDBRawType = z.enum([
   "VARCHAR",
   "DOUBLE",
@@ -61,6 +43,24 @@ export const ColumnSchema = z.object({
 export type ColumnSchema = z.infer<typeof ColumnSchema>;
 export const ColumnsSchema = z.record(ColumnSchema);
 export type ColumnsSchema = z.infer<typeof ColumnsSchema>;
+
+export type DataLocation = {
+  dataType: FileDataType;
+  fileLocation: FileLocation;
+  location: string;
+  tableName: string;
+  schemaName: string;
+  columnSchema: Record<string, ColumnSchema>;
+};
+
+type Run = { type: "run"; force: boolean };
+
+type RecordBatch = {
+  primaryKeys: string[];
+  records: Record<string, any>[];
+};
+
+export type Inserts = Record<string, RecordBatch>;
 
 type RawLoaderInsert = {
   records: Record<string, any>[];
