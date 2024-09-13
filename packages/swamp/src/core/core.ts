@@ -128,7 +128,6 @@ export class Swamp {
     if (process.env.NODE_ENV === "development") {
       for (const transformer of this.transformers) {
         if (transformer.transformType === "transform") {
-          console.log(`Running transformer ${transformer.uniqueId}`);
           transformer.execute({ type: "run", force: true });
         }
       }
