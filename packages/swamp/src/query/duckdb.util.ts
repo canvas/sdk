@@ -11,6 +11,7 @@ import { generateRandomAlphanumeric, getTempDirectory } from "../util";
 import {
   ColumnSchema,
   ColumnsSchema,
+  DataLocation,
   DuckDBType,
   LoaderInserts,
 } from "../core/types";
@@ -197,34 +198,56 @@ export function getColumnType(columnType: DuckDBType): string {
     : columnType.type;
 }
 
+export function sanitizeDuckDb(reference: string): string {
+  return reference.replaceAll("-", "_");
+}
+export function sanitizeTableSchema(table: {
+  schemaName: string;
+  tableName: string;
+}): string {
+  return `${sanitizeDuckDb(table.schemaName)}.${sanitizeDuckDb(
+    table.tableName
+  )}`;
+}
+
 export function generateCreateTableStatement(
   tableName: string,
-  schema: Record<string, ColumnSchema>
-): string {
-  const columns = Object.entries(schema).map(([_columnName, columnSchema]) => {
-    const columnType = getColumnType(columnSchema.columnType);
-    const isPrimaryKey = columnSchema.isPrimaryKey ? "PRIMARY KEY" : "";
-    const columnName = escapeColumn(_columnName);
-    return `${columnName} ${columnType} ${isPrimaryKey}`.trim();
-  });
+  schemaName: string,
+  columnSchema: Record<string, ColumnSchema>,
+  replaceTable: boolean
+): {
+  createSchemaStatement: string;
+  createTableStatement: string;
+  fullTableName: string;
+} {
+  const fullTableName = `${sanitizeDuckDb(schemaName)}.${sanitizeDuckDb(
+    tableName
+  )}`;
+  const createSchemaStatement = `CREATE SCHEMA IF NOT EXISTS ${sanitizeDuckDb(
+    schemaName
+  )}`;
 
-  // const columnsDefinition =
-  //   columns.join(", ") + ", _swamp_updated_at TIMESTAMP";
-  const columnsDefinition = columns.join(", ");
-  return `CREATE TABLE ${tableName} (${columnsDefinition})`;
+  const columnDefinitions = Object.entries(columnSchema)
+    .map(([columnName, schema]) => {
+      const columnType = getColumnType(schema.columnType);
+      const primaryKey = schema.isPrimaryKey ? "PRIMARY KEY" : "";
+      return `${escapeColumn(columnName)} ${columnType} ${primaryKey}`.trim();
+    })
+    .join(", ");
+
+  const create = replaceTable
+    ? "CREATE OR REPLACE TABLE"
+    : "CREATE TABLE IF NOT EXISTS";
+
+  const createTableStatement = `${create} ${fullTableName} (${columnDefinitions});`;
+
+  return { createSchemaStatement, createTableStatement, fullTableName };
 }
 
 type BatchRow = { columns: string[]; values: string[] };
-type CreateBatchTableResult = {
-  inserts: BatchRow[];
-};
 
-function createBatchTable(
-  db: Database,
-  records: Record<string, any>[],
-  schema: Record<string, ColumnSchema>
-): CreateBatchTableResult {
-  const inserts: BatchRow[] = [];
+function getInsertRows(records: Record<string, any>[]): BatchRow[] {
+  const rows: BatchRow[] = [];
 
   for (const record of records) {
     const columns: string[] = [];
@@ -235,36 +258,33 @@ function createBatchTable(
         values.push(value);
       }
     }
-    inserts.push({ columns, values });
+    rows.push({ columns, values });
   }
 
-  return {
-    inserts,
-  };
+  return rows;
 }
 
-export type StagedTable = {
+export type InsertRows = {
   schemaName: string;
   tableName: string;
-  inserts: BatchRow[];
+  rows: BatchRow[];
   columnSchema: ColumnsSchema;
 };
 
-export async function stageInserts(
-  db: Database,
+export async function flattenInserts(
   inserts: LoaderInserts
-): Promise<StagedTable[]> {
-  const queuedWrites: StagedTable[] = [];
+): Promise<InsertRows[]> {
+  const queuedWrites: InsertRows[] = [];
   for (const [tableName, batch] of Object.entries(inserts)) {
     const { columnSchema, records, schemaName } = batch;
     if (records.length === 0) {
       continue;
     }
 
-    const { inserts } = createBatchTable(db, records, columnSchema);
+    const rows = getInsertRows(records);
 
-    const queuedWrite: StagedTable = {
-      inserts,
+    const queuedWrite: InsertRows = {
+      rows,
       columnSchema,
       schemaName,
       tableName,

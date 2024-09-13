@@ -7,7 +7,6 @@ import {
   Loader,
   BaseTransformer,
   TransformType,
-  ReadDataLocation,
   S3Credentials,
 } from "./types";
 import { TransformerExecutor } from "../transformer/transformer";
@@ -15,6 +14,11 @@ import { InMemoryBroker } from "../messages/in.memory.broker";
 import { Server } from "http";
 import { initializeServer } from "../server/server";
 import { MessageBroker } from "../messages/message.broker";
+
+// Fixes Express Do not know how to serialize a BigInt
+(BigInt.prototype as any).toJSON = function () {
+  return this.toString();
+};
 
 const port = process.env.PORT || 9001;
 
@@ -27,11 +31,16 @@ type BuilderLoader<Secret, Cursor> = {
   uniqueId: string;
   extras?: LoaderExtras;
 };
+type BuilderTransformer = {
+  transformer: TransformType;
+  uniqueId: string;
+};
 
 export class SwampBuilder {
   secrets: SecretStore | null = null;
   s3Credentials: S3Credentials | null = null;
   loaders: BuilderLoader<any, any>[] = [];
+  transformers: BuilderTransformer[] = [];
 
   withSecretStore(secrets: SecretStore): SwampBuilder {
     this.secrets = secrets;
@@ -53,6 +62,10 @@ export class SwampBuilder {
     this.loaders.push({ loader, uniqueId, extras });
     return this;
   }
+  withTransformer(transformer: TransformType, uniqueId: string): SwampBuilder {
+    this.transformers.push({ transformer, uniqueId });
+    return this;
+  }
   initialSwamp(): Swamp {
     if (!this.secrets) {
       throw new Error("Must set a secret store");
@@ -61,14 +74,15 @@ export class SwampBuilder {
     if (this.s3Credentials) {
       const s3Credentials = this.s3Credentials;
       const store = new S3SQLiteStore(s3Credentials);
-      const sqlEngine = new DuckDbEngine(store).withS3Credentials(
-        s3Credentials
-      );
+      const sqlEngine = new DuckDbEngine(
+        store,
+        messageBroker
+      ).withS3Credentials(s3Credentials);
       const swamp = new Swamp(store, this.secrets, messageBroker, sqlEngine);
       return swamp;
     } else {
       const store = new SQLiteStore("local.db");
-      const sqlEngine = new DuckDbEngine(store);
+      const sqlEngine = new DuckDbEngine(store, messageBroker);
       const swamp = new Swamp(store, this.secrets, messageBroker, sqlEngine);
       return swamp;
     }
@@ -80,6 +94,9 @@ export class SwampBuilder {
         .addLoader(loader.loader, loader.uniqueId, loader.extras?.rateLimitMs)
         .withCadence(loader.extras?.cadenceSeconds || 60 * 15);
     }
+    for (const transformer of this.transformers) {
+      swamp.addTransformer(transformer.transformer, transformer.uniqueId);
+    }
     swamp.initialize();
     return swamp;
   }
@@ -89,7 +106,7 @@ export class Swamp {
   store: Store;
   secretStore: SecretStore;
   transformers: BaseTransformer[];
-  sqlEngine: SqlEngine | null = null;
+  sqlEngine: SqlEngine;
   messageBroker: MessageBroker;
   server: Server | null = null;
 
@@ -97,7 +114,7 @@ export class Swamp {
     store: Store,
     secretStore: SecretStore,
     messageBroker: MessageBroker,
-    sqlEngine: SqlEngine | null
+    sqlEngine: SqlEngine
   ) {
     this.store = store;
     this.secretStore = secretStore;
@@ -107,8 +124,14 @@ export class Swamp {
   }
 
   async initialize(): Promise<void> {
-    if (this.sqlEngine) {
-      await this.sqlEngine.initialize(this.messageBroker);
+    await this.sqlEngine.initialize();
+    if (process.env.NODE_ENV === "development") {
+      for (const transformer of this.transformers) {
+        if (transformer.transformType === "transform") {
+          console.log(`Running transformer ${transformer.uniqueId}`);
+          transformer.execute({ type: "run", force: true });
+        }
+      }
     }
     const app = initializeServer(this);
     this.server = app.listen(port, () => {
@@ -117,9 +140,6 @@ export class Swamp {
   }
 
   query(query: string) {
-    if (!this.sqlEngine) {
-      throw new Error("No SqlEngine installed");
-    }
     return this.sqlEngine.querySql(query);
   }
 
@@ -128,7 +148,6 @@ export class Swamp {
     uniqueId: string
   ): TransformerExecutor {
     const transformer = new TransformerExecutor(
-      this.secretStore,
       this.messageBroker,
       uniqueId,
       transform
@@ -166,25 +185,6 @@ export class Swamp {
       console.error(`Transformer ${loaderId} not found`);
       return;
     }
-    const subscriptions = transformer.subscriptions;
-    const tableLocations = await this.store.getTables();
-    const subscribedTables: ReadDataLocation[] = [];
-    for (const subscription of subscriptions) {
-      for (const table of subscription.tables) {
-        const tableLocation = tableLocations.find(
-          (loc) =>
-            loc.tableName === table && loc.schemaName === subscription.uniqueId
-        );
-        if (tableLocation) {
-          subscribedTables.push(tableLocation);
-        } else {
-          console.log(
-            `Table ${subscription.uniqueId}.${table} subscribed by ${loaderId} not found`
-          );
-          return;
-        }
-      }
-    }
-    transformer.execute(event, subscribedTables);
+    transformer.execute(event);
   }
 }

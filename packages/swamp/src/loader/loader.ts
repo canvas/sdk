@@ -41,8 +41,8 @@ export class LoaderExecutor<SecretsType, CursorType> extends BaseTransformer {
 
   async runLoaderLoop() {
     while (true) {
-      await this.maybeRun(false);
       await sleep(1000);
+      await this.maybeRun(false);
       continue;
     }
   }
@@ -142,7 +142,7 @@ export class LoaderExecutor<SecretsType, CursorType> extends BaseTransformer {
           return;
         }
         const inserts = processInserts(result.inserts, this.uniqueId);
-        this.messageBroker.publishNewRecords({ type: "records", inserts });
+        this.messageBroker.publishNewWrites({ type: "records", inserts });
         cursor = result.cursor;
         await this.setCursor(cursor);
         if (result.hasMore) {

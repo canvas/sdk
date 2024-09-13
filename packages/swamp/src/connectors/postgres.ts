@@ -45,7 +45,7 @@ const getTableNames = async (client: Client): Promise<string[]> => {
   }
 };
 
-const getPrimaryKey = async (
+const getPrimaryKeys = async (
   client: Client,
   tableName: string
 ): Promise<Result<string[], string>> => {
@@ -60,9 +60,6 @@ const getPrimaryKey = async (
   );
   if (res.rows.length === 0) {
     return err(`No primary key found for table ${tableName}`);
-  }
-  if (res.rows.length > 1) {
-    return err(`Multiple primary keys found for table ${tableName}`);
   }
   return ok(res.rows.map((row) => row.column_name));
 };
@@ -104,7 +101,7 @@ async function getRecords(
     ? tableNames[nextTableIndex]
     : tableNames[0];
 
-  const primaryKey = await getPrimaryKey(client, tableName);
+  const primaryKey = await getPrimaryKeys(client, tableName);
   if (primaryKey.isErr()) {
     console.warn(primaryKey.error);
     return {

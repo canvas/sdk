@@ -1,11 +1,11 @@
-import { CreateRecordsEvent, DataLocation } from "../core/types";
+import { TableUpdatedEvent, WriteRecordsEvent } from "../core/types";
 
-export type HandleCreateRecords = (event: CreateRecordsEvent) => void;
-export type HandleNewDataLocation = (event: DataLocation) => void;
+export type HandleWriteRecords = (event: WriteRecordsEvent) => void;
+export type HandleTableUpdated = (event: TableUpdatedEvent) => void;
 
 export interface MessageBroker {
-  publishNewRecords(event: CreateRecordsEvent): void;
-  subscribeToNewRecords(subscriber: HandleCreateRecords): void;
-  publishNewDataLocation(event: DataLocation): void;
-  subscribeToNewDataLocation(subscriber: HandleNewDataLocation): void;
+  publishNewWrites(event: WriteRecordsEvent): void;
+  subscribeToNewWrites(subscriber: HandleWriteRecords): void;
+  publishTableUpdated(event: TableUpdatedEvent): void;
+  subscribeToTableUpdated(subscriber: HandleTableUpdated): void;
 }

@@ -1,5 +1,6 @@
 import { Result } from "neverthrow";
 import { z } from "zod";
+import { SqlEngine } from "../query/query";
 
 export const S3Credentials = z.object({
   keyId: z.string(),
@@ -71,16 +72,24 @@ export type RawLoaderInserts = Record<string, RawLoaderInsert>;
 type LoaderInsert = RawLoaderInsert & { schemaName: string };
 export type LoaderInserts = Record<string, LoaderInsert>;
 
-export type CreateRecordsEvent = {
+export type InsertRecordsEvent = {
   type: "records";
   inserts: LoaderInserts;
 };
 
-export type TransformerInputEvent = CreateRecordsEvent | Run;
+export type CreateSqlTableEvent = {
+  type: "sql_table";
+} & TransformSQLResult;
 
-export type TransformerOutputEvent = CreateRecordsEvent;
+export type WriteRecordsEvent = InsertRecordsEvent | CreateSqlTableEvent;
 
-export type TransformerEmitter = (event: TransformerOutputEvent) => void;
+export type TableUpdatedEvent = {
+  type: "table_updated";
+  schemaName: string;
+  tableName: string;
+};
+
+export type TransformerInputEvent = InsertRecordsEvent | Run;
 
 const LoaderSecrets = z.record(z.string()).nullable();
 
@@ -108,12 +117,12 @@ export type Loader<SecretsType, CursorType> = {
 export type TransformSQLResult = {
   query: string;
   tableName: string;
-  primaryKey: string;
+  schemaName: string;
+  primaryKeys: string[];
 };
 export type TransformSQL = {
-  (): Result<TransformSQLResult, string>;
+  (): TransformSQLResult;
   type: "sql";
-  filePath?: string;
 };
 
 export type TransformType = TransformSQL;
@@ -149,10 +158,7 @@ export abstract class BaseTransformer {
     this.filePath = null;
   }
 
-  abstract execute(
-    event: TransformerInputEvent,
-    locations: ReadDataLocation[]
-  ): void;
+  abstract execute(event: TransformerInputEvent): void;
 
   withSubscription(transformer: BaseTransformer, tables: string[]) {
     this.subscriptions.push({ uniqueId: transformer.uniqueId, tables });

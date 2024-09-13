@@ -1,30 +1,30 @@
-import { CreateRecordsEvent, DataLocation } from "../core/types";
+import { InsertRecordsEvent, TableUpdatedEvent } from "../core/types";
 import {
   MessageBroker,
-  HandleCreateRecords,
-  HandleNewDataLocation,
+  HandleWriteRecords,
+  HandleTableUpdated,
 } from "./message.broker";
 
 export class InMemoryBroker implements MessageBroker {
-  createRecordsSubscribers: HandleCreateRecords[] = [];
-  mewDataLocationSubscribers: HandleNewDataLocation[] = [];
-
-  publishNewRecords(event: CreateRecordsEvent): void {
+  createRecordsSubscribers: HandleWriteRecords[] = [];
+  tableUpdatedSubscribers: HandleTableUpdated[] = [];
+  publishNewWrites(event: InsertRecordsEvent): void {
     for (const subscriber of this.createRecordsSubscribers) {
       subscriber(event);
     }
   }
 
-  subscribeToNewRecords(subscriber: HandleCreateRecords): void {
+  subscribeToNewWrites(subscriber: HandleWriteRecords): void {
     this.createRecordsSubscribers.push(subscriber);
   }
 
-  publishNewDataLocation(event: DataLocation): void {
-    for (const subscriber of this.mewDataLocationSubscribers) {
+  publishTableUpdated(event: TableUpdatedEvent): void {
+    for (const subscriber of this.tableUpdatedSubscribers) {
       subscriber(event);
     }
   }
-  subscribeToNewDataLocation(subscriber: HandleNewDataLocation): void {
-    this.mewDataLocationSubscribers.push(subscriber);
+
+  subscribeToTableUpdated(subscriber: HandleTableUpdated): void {
+    this.tableUpdatedSubscribers.push(subscriber);
   }
 }

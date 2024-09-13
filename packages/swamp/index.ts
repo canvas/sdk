@@ -12,5 +12,5 @@ export {
 } from "./src/secrets/secret.store";
 export { SQLiteStore, S3SQLiteStore } from "./src/store/sqlite.store";
 export { runPostgres } from "./src/connectors/postgres";
-export { runPostgresCursorWithConfig } from "./src/connectors/postgres.cursor";
 export { SwampBuilder } from "./src/core/core";
+export { TransformSQL, TransformSQLResult } from "./src/core/types";

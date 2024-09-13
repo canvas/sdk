@@ -7,19 +7,20 @@ import {
 } from "../util";
 import {
   ColumnSchema,
-  CreateRecordsEvent,
+  CreateSqlTableEvent,
   DataLocation,
   DuckDBType,
+  InsertRecordsEvent,
   S3Credentials,
+  WriteRecordsEvent,
 } from "../core/types";
-import { addDuckDBTables } from "./duckdb";
 import {
   all,
   exec,
   generateCreateTableStatement,
-  stageInserts,
+  flattenInserts,
   prepare,
-  StagedTable,
+  InsertRows,
   statementAll,
   getColumnType,
 } from "./duckdb.util";
@@ -35,7 +36,7 @@ export type QueryResult = {
 
 export interface SqlEngine {
   querySql(query: string): Promise<QueryResult>;
-  initialize(messageBroker: MessageBroker): Promise<void>;
+  initialize(): Promise<void>;
 }
 
 type QueuedWrite = {
@@ -53,7 +54,6 @@ type SchemaChange = {
 type MergeResult = {
   schemaChanges: SchemaChange[];
   columnSchema: Record<string, ColumnSchema>;
-  missingInsertColumns: string[];
 };
 
 function mergeSchemas(
@@ -62,7 +62,6 @@ function mergeSchemas(
 ): MergeResult {
   const schemaChanges: SchemaChange[] = [];
   const columnSchema: Record<string, ColumnSchema> = existingSchema;
-  const missingInsertColumns: string[] = [];
   for (const [key, value] of Object.entries(newSchema)) {
     if (!existingSchema[key]) {
       schemaChanges.push({
@@ -73,33 +72,65 @@ function mergeSchemas(
       columnSchema[key] = value;
     }
   }
-  for (const key of Object.keys(existingSchema)) {
-    if (!newSchema[key]) {
-      missingInsertColumns.push(key);
-    }
+
+  return { schemaChanges: schemaChanges, columnSchema };
+}
+
+export async function addDuckDBTables(
+  db: Database,
+  tables: DataLocation[]
+): Promise<Database> {
+  if (tables.length === 0) {
+    return db;
   }
-  return { schemaChanges: schemaChanges, columnSchema, missingInsertColumns };
+  const createTableStatements = tables
+    .map((table) => {
+      const { createSchemaStatement, createTableStatement, fullTableName } =
+        generateCreateTableStatement(
+          table.tableName,
+          table.schemaName,
+          table.columnSchema,
+          false
+        );
+      return `
+      ${createSchemaStatement};
+      ${createTableStatement};
+      INSERT INTO ${fullTableName}
+        SELECT * FROM read_parquet('${table.location}');`;
+    })
+    .join(";");
+  const result = await all(db, createTableStatements);
+  if (result.isErr()) {
+    console.log("Error adding table", result.error);
+  }
+  return db;
 }
 
 const DATA_ROOT = "data";
 
 export class DuckDbEngine implements SqlEngine {
   db: Database | null = null;
-
   credentials: S3Credentials | null = null;
-
   store: TableStoreInterface;
+  messageBroker: MessageBroker;
 
   private queuedWrites: Map<string, QueuedWrite> = new Map();
   private debouncedWrites: Map<string, ReturnType<typeof debounce>> = new Map();
 
-  constructor(store: TableStoreInterface) {
+  constructor(store: TableStoreInterface, messageBroker: MessageBroker) {
     this.store = store;
+    this.messageBroker = messageBroker;
   }
 
   withS3Credentials(credentials: S3Credentials): DuckDbEngine {
     this.credentials = credentials;
     return this;
+  }
+
+  async initialize(): Promise<void> {
+    const localTableLocations = await this.downloadData();
+    await addDuckDBTables(await this.getDb(), localTableLocations);
+    this.messageBroker.subscribeToNewWrites(this.handleWriteRecords.bind(this));
   }
 
   async downloadData(): Promise<DataLocation[]> {
@@ -132,12 +163,6 @@ export class DuckDbEngine implements SqlEngine {
     );
   }
 
-  async initialize(messageBroker: MessageBroker): Promise<void> {
-    const localTableLocations = await this.downloadData();
-    await addDuckDBTables(await this.getDb(), localTableLocations);
-    messageBroker.subscribeToNewRecords(this.handleNewRecords.bind(this));
-  }
-
   async writeTableLocal(queuedWrite: QueuedWrite): Promise<string> {
     const db = await this.getDb();
     const { schemaName, tableName } = queuedWrite;
@@ -168,14 +193,13 @@ export class DuckDbEngine implements SqlEngine {
       if (tryUpload.isErr()) {
         console.error(`Error uploading file: ${tryUpload.error}`);
         return err(`Error uploading file: ${tryUpload.error}`);
-      } else {
-        return ok({
-          ...queuedWrite,
-          location: tryUpload.value,
-          dataType: "parquet",
-          fileLocation: "s3",
-        });
       }
+      return ok({
+        ...queuedWrite,
+        location: tryUpload.value,
+        dataType: "parquet",
+        fileLocation: "s3",
+      });
     } else {
       return ok({
         ...queuedWrite,
@@ -202,28 +226,31 @@ export class DuckDbEngine implements SqlEngine {
   }
 
   async mergeStagedTable(
-    stagedTable: StagedTable
+    stagedTable: InsertRows
   ): Promise<Result<QueuedWrite, string>> {
     const db = await this.getDb();
     const {
-      inserts,
+      rows: inserts,
       columnSchema: newColumnSchema,
       schemaName,
       tableName,
     } = stagedTable;
-    const fullTableName = `${schemaName}.${tableName}`;
 
     const existingTable = await this.getTable(schemaName, tableName);
 
+    const { createSchemaStatement, createTableStatement, fullTableName } =
+      generateCreateTableStatement(
+        tableName,
+        schemaName,
+        newColumnSchema,
+        false
+      );
+
     if (!existingTable) {
       // must create a new table in order to preserve primary keys
-      const createTableStatement = generateCreateTableStatement(
-        fullTableName,
-        newColumnSchema
-      );
-      const createTableStmt = `CREATE SCHEMA IF NOT EXISTS ${schemaName};
-      ${createTableStatement};
-      `;
+
+      const createTableStmt = `${createSchemaStatement};
+      ${createTableStatement};`;
       const renameResult = await all(db, createTableStmt);
       if (renameResult.isErr()) {
         return err(
@@ -254,11 +281,8 @@ export class DuckDbEngine implements SqlEngine {
 
     const { columnSchema: existingColumnSchema } = existingTable;
 
-    const {
-      schemaChanges: actions,
-      columnSchema: mergedColumnSchema,
-      missingInsertColumns,
-    } = mergeSchemas(existingColumnSchema, newColumnSchema);
+    const { schemaChanges: actions, columnSchema: mergedColumnSchema } =
+      mergeSchemas(existingColumnSchema, newColumnSchema);
 
     const primaryKeys = Object.entries(mergedColumnSchema)
       .filter(([_, schema]) => schema.isPrimaryKey)
@@ -305,31 +329,115 @@ export class DuckDbEngine implements SqlEngine {
     });
   }
 
-  async handleNewRecords(event: CreateRecordsEvent) {
-    const db = await this.getDb();
+  async handleInsertRecords(
+    event: InsertRecordsEvent
+  ): Promise<Result<QueuedWrite[], string>> {
     const { inserts } = event;
-    const stagedTables = await stageInserts(db, inserts);
-    for (const file of stagedTables) {
-      const queuedWrite = await this.mergeStagedTable(file);
+    const tablesRows = await flattenInserts(inserts);
+    const queuedWrites: QueuedWrite[] = [];
+    for (const tableRows of tablesRows) {
+      const queuedWrite = await this.mergeStagedTable(tableRows);
       if (queuedWrite.isErr()) {
         console.error(
-          `Error committing file for ${file.tableName}: ${queuedWrite.error}`
+          `Error committing file for ${tableRows.tableName}: ${queuedWrite.error}`
         );
         continue;
       }
-      const { schemaName, tableName } = queuedWrite.value;
+      queuedWrites.push(queuedWrite.value);
+    }
+    return ok(queuedWrites);
+  }
 
-      const key = `${schemaName}.${tableName}`;
-      this.queuedWrites.set(key, queuedWrite.value);
+  async handleCreateSqlTable(
+    event: CreateSqlTableEvent
+  ): Promise<Result<QueuedWrite, string>> {
+    const { schemaName, tableName, query, primaryKeys } = event;
+    // First, get the columnSchema from the query
+    const tryColumnSchema = await this.getColumnSchemaFromQuery(
+      query,
+      primaryKeys
+    );
+    if (tryColumnSchema.isErr()) {
+      return err(tryColumnSchema.error);
+    }
+    const columnSchema = tryColumnSchema.value;
 
-      // Get or create a debounced write function for this table
-      let debouncedWrite = this.debouncedWrites.get(key);
-      if (!debouncedWrite) {
-        debouncedWrite = debounce(this.performWrite.bind(this, key), 3000);
-        this.debouncedWrites.set(key, debouncedWrite);
+    const { createSchemaStatement, createTableStatement, fullTableName } =
+      generateCreateTableStatement(tableName, schemaName, columnSchema, true);
+
+    const insertStatement = `INSERT INTO ${fullTableName} ${query}`;
+
+    const fullStatement = `BEGIN TRANSACTION;
+    ${createSchemaStatement};
+    ${createTableStatement};
+    ${insertStatement};
+    COMMIT;`;
+
+    const db = await this.getDb();
+    const result = await all(db, fullStatement);
+    if (result.isErr()) {
+      console.error(
+        `Error creating table from query ${fullStatement}: ${result.error}`
+      );
+      return err(result.error);
+    }
+    return ok({
+      schemaName,
+      tableName,
+      columnSchema,
+    });
+  }
+
+  async getColumnSchemaFromQuery(
+    query: string,
+    primaryKeys: string[]
+  ): Promise<Result<Record<string, ColumnSchema>, string>> {
+    const db = await this.getDb();
+    const statement = await prepare(db, query);
+    if (statement.isErr()) {
+      return err(statement.error);
+    }
+    const columns = statement.value.columns();
+    const columnSchema: Record<string, ColumnSchema> = {};
+    for (const column of columns) {
+      columnSchema[column.name] = {
+        columnType: { type: column.type.sql_type as any },
+        isPrimaryKey: primaryKeys.includes(column.name),
+      };
+    }
+    return ok(columnSchema);
+  }
+
+  queueWrite(queuedWrite: QueuedWrite) {
+    const { schemaName, tableName } = queuedWrite;
+    const key = `${schemaName}.${tableName}`;
+    this.queuedWrites.set(key, queuedWrite);
+    // Get or create a debounced write function for this table
+    let debouncedWrite = this.debouncedWrites.get(key);
+    if (!debouncedWrite) {
+      debouncedWrite = debounce(this.performWrite.bind(this, key), 3000);
+      this.debouncedWrites.set(key, debouncedWrite);
+    }
+    debouncedWrite();
+  }
+
+  async handleWriteRecords(event: WriteRecordsEvent) {
+    if (event.type === "records") {
+      const writes = await this.handleInsertRecords(event);
+      if (writes.isOk()) {
+        for (const write of writes.value) {
+          this.queueWrite(write);
+        }
+      } else {
+        console.error(`Error handling insert records: ${writes.error}`);
       }
-
-      debouncedWrite();
+    } else if (event.type === "sql_table") {
+      const write = await this.handleCreateSqlTable(event);
+      if (write.isOk()) {
+        this.queueWrite(write.value);
+      } else {
+        console.error(`Error handling create sql table: ${write.error}`);
+      }
     }
   }
 
@@ -350,27 +458,23 @@ export class DuckDbEngine implements SqlEngine {
       }
       this.queuedWrites.delete(key);
       await this.updateStore(dataLocation.value);
+      this.messageBroker.publishTableUpdated({
+        type: "table_updated",
+        schemaName: dataLocation.value.schemaName,
+        tableName: dataLocation.value.tableName,
+      });
     } else {
       console.error("performWrite no queued write", key);
     }
   }
 
-  // async handleNewDataLocation(dataLocation: DataLocation): Promise<void> {
-  //   const db = await this.getDb();
-  //   await addDuckDBTables(db, [dataLocation]);
-  // }
-
-  async initDb(): Promise<Database> {
-    const db = new Database(":memory:");
-    if (this.credentials) {
-      await all(db, createS3SecretStatement(this.credentials));
-    }
-    return db;
-  }
-
   async getDb(): Promise<Database> {
     if (!this.db) {
-      this.db = await this.initDb();
+      const db = new Database(":memory:");
+      if (this.credentials) {
+        await all(db, createS3SecretStatement(this.credentials));
+      }
+      this.db = db;
     }
     return this.db;
   }
