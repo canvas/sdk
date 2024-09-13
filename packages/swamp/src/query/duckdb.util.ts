@@ -227,11 +227,14 @@ export function generateCreateTableStatement(
     schemaName
   )}`;
 
+  const primaryKeys: string[] = [];
   const columnDefinitions = Object.entries(columnSchema)
     .map(([columnName, schema]) => {
       const columnType = getColumnType(schema.columnType);
-      const primaryKey = schema.isPrimaryKey ? "PRIMARY KEY" : "";
-      return `${escapeColumn(columnName)} ${columnType} ${primaryKey}`.trim();
+      if (schema.isPrimaryKey) {
+        primaryKeys.push(columnName);
+      }
+      return `${escapeColumn(columnName)} ${columnType}`.trim();
     })
     .join(", ");
 
@@ -239,7 +242,10 @@ export function generateCreateTableStatement(
     ? "CREATE OR REPLACE TABLE"
     : "CREATE TABLE IF NOT EXISTS";
 
-  const createTableStatement = `${create} ${fullTableName} (${columnDefinitions});`;
+  const primaryKey =
+    primaryKeys.length > 0 ? `, PRIMARY KEY (${primaryKeys.join(", ")})` : "";
+
+  const createTableStatement = `${create} ${fullTableName} (${columnDefinitions}${primaryKey});`;
 
   return { createSchemaStatement, createTableStatement, fullTableName };
 }
