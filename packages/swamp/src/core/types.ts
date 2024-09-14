@@ -123,6 +123,7 @@ export type TransformSQLResult = {
 export type TransformSQL = {
   (): TransformSQLResult;
   type: "sql";
+  subscriptions: { schemaName: string; tableName: string }[];
 };
 
 export type TransformType = TransformSQL;

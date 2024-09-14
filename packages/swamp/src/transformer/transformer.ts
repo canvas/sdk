@@ -26,8 +26,18 @@ export class TransformerExecutor extends BaseTransformer {
     this.transform = transformer;
     this.messageBroker = messageBroker;
     messageBroker.subscribeToTableUpdated((event) => {
-      // todo: check if we should subscribe to this table
-      this.executeFull();
+      const subscriptions = this.transform.subscriptions;
+      if (
+        subscriptions.find(
+          (subscription) =>
+            subscription.schemaName.toLowerCase() ===
+              event.schemaName.toLowerCase() &&
+            subscription.tableName.toLowerCase() ===
+              event.tableName.toLowerCase()
+        )
+      ) {
+        this.executeFull();
+      }
     });
   }
 
