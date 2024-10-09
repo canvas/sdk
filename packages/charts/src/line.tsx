@@ -9,6 +9,7 @@ export function LineChart<DomainValue extends Ordinal>({
   data,
   className,
   options,
+  theme = {},
 }: {
   xScale: Scale<DomainValue>;
   yScale: Scale<number>;
@@ -30,6 +31,9 @@ export function LineChart<DomainValue extends Ordinal>({
   const markers: { x: number; y: number }[][] = paths.map((_) => []);
   const showMarkers = options?.showMarkers ?? data.length <= 5;
 
+  let prevX = null;
+  let prevY = null;
+
   data.forEach((point, pointIndex) => {
     const values = Array.isArray(point.y) ? point.y : [point.y];
 
@@ -43,8 +47,19 @@ export function LineChart<DomainValue extends Ordinal>({
 
       const command =
         pointIndex === 0
-          ? moveCursorTo(roundPixel(x), roundPixel(y))
-          : lineTo(roundPixel(x), roundPixel(y));
+          ? moveCursorTo(x, y)
+          : theme?.smoothed
+          ? // TODO - this is wrong
+            bezierCurveTo(
+              prevX + (x - prevX) / 3,
+              prevY,
+              prevX + ((x - prevX) / 3) * 2,
+              y,
+              x,
+              y
+            )
+          : lineTo(x, y);
+
       const path = paths[valueIndex];
       if (path) {
         path.push(command);
@@ -55,6 +70,9 @@ export function LineChart<DomainValue extends Ordinal>({
           markers[valueIndex].push({ x, y });
         }
       }
+
+      prevX = x;
+      prevY = y;
     });
   });
 
