@@ -1,11 +1,7 @@
 "use client";
 
 import { setLanguage } from "@/app/actions/set-language";
-import {
-  ReactElement,
-  ReactNode,
-  useState,
-} from "react";
+import { ReactElement, ReactNode, useState } from "react";
 
 export function ClientCodeSwitcher({
   children,

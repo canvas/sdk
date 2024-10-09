@@ -1,0 +1,324 @@
+export const metadata = {
+  title: "Multi-tenant access",
+};
+
+import { CodeSwitcher } from '@/app/components/code-switcher';
+import { CodeTab } from "@/app/components/client/mdx";
+
+
+# Multi-tenant access
+
+If you want to expose different subsets of data to different sets of users in a multi-tenant app, you can use dynamically scoped access tokens.
+
+1. The app backend creates an encrypted token that asserts claims about the user session (e.g. "this is user 24601" or "this is a finance admin user")
+   - Tokens are encrypted so that they cannot be tampered with by the user.
+2. The token is then passed to the frontend, which in turn passes it to the Canvas backend.
+3. The Canvas backend authenticates it using your public key, and filters the dataset using the defined scopes.
+4. Data, now appropriately filtered, is returned to the user and rendered.
+
+## Diagram
+
+export const secret = (
+  <code className="blur-[2px] hover:blur-[0] transition-all cursor-crosshair text-primary">
+    {"{"}uId: 24601{"}"}
+  </code>
+);
+
+export const nodes = [
+  ["Visit dashboard", 0, 0, [0, 1]],
+  [<code>getEncryptedToken()</code>, 1, 0, [1, 2]],
+  [<span>🔐 {secret}</span>, 1, 1, [2, 1]],
+  [<code>getData(token: {secret})</code>, 1.5, 2, [1, 3]],
+  [
+    <code>
+      {"{"}data: [..]{"}"}
+    </code>,
+    1.5,
+    3,
+    [3, 1],
+  ],
+  [
+    <code>
+      &lt;Chart data={"{"}data{"}"} /&gt;
+    </code>,
+    0,
+    4,
+    [1, 0],
+  ],
+];
+
+export const entities = [
+  "User (userId: 24601)",
+  "React",
+  "App Backend",
+  "Canvas Backend",
+];
+
+export const bandWidth = 220;
+export const boxMargin = 20;
+export const rowHeight = 60;
+
+    <div className="relative h-[400px] shadow-box border-marble-900/10 border rounded-lg overflow-x-auto">
+      <svg className="absolute inset-0 w-full h-full">
+        <defs>
+          <marker
+            id="triangle"
+            viewBox="0 0 10 10"
+            refX="5"
+            refY="5"
+            markerWidth="6"
+            markerHeight="6"
+            orient="auto"
+          >
+            <path d="M0,0 L 10,5 L 0,10 z" fill="context-fill" />
+          </marker>
+          <filter
+            id="nnnoise-filter"
+            x="-20%"
+            y="-20%"
+            width="140%"
+            height="140%"
+            filterUnits="objectBoundingBox"
+            primitiveUnits="userSpaceOnUse"
+            colorInterpolationFilters="linearRGB"
+          >
+            <feTurbulence
+              type="fractalNoise"
+              baseFrequency=".102"
+              numOctaves="4"
+              seed="15"
+              stitchTiles="stitch"
+              x="0%"
+              y="0%"
+              width="100%"
+              height="100%"
+              result="turbulence"
+            ></feTurbulence>
+            <feSpecularLighting
+              surfaceScale="15"
+              specularConstant="0.75"
+              specularExponent="20"
+              lightingColor="#5957a8"
+              x="0%"
+              y="0%"
+              width="100%"
+              height="100%"
+              in="turbulence"
+              result="specularLighting"
+            >
+              <feDistantLight azimuth="3" elevation="100"></feDistantLight>
+            </feSpecularLighting>
+          </filter>
+        </defs>
+        <rect
+          width="100%"
+          height="500"
+          fill="#888"
+          filter="url(#nnnoise-filter)"
+        ></rect>
+        {entities.map((entity, index) => {
+          return (
+            <line
+              x1={20 + bandWidth * index}
+              x2={20 + bandWidth * index}
+              y1={20}
+              y2={380}
+              className="stroke-marble-200 stroke-1"
+            />
+          );
+        })}
+        {nodes.map(([content, x, y, [x1, x2]]) => {
+          const sign = x2 > x1 ? 1 : -1;
+          return (
+            <>
+              <path
+                className="stroke-marble-400 fill-marble-400 stroke-1"
+                d={`M${20 + x1 * bandWidth + 4 * sign},${
+                  80 + y * rowHeight + 20
+                }
+                            L${20 + x2 * bandWidth - 4 * sign},${
+                  80 + y * rowHeight + 20
+                } 
+                        `}
+                markerEnd="url(#triangle)"
+              />
+            </>
+          );
+        })}
+      </svg>
+      <div className="text-[10px]">
+        {entities.map((entity, index) => {
+          return (
+            <div
+              className="absolute font-medium"
+              style={{
+                left: 20 + index * bandWidth + 8,
+                top: 20,
+                width: bandWidth - boxMargin * 2,
+              }}
+            >
+              {entity}
+            </div>
+          );
+        })}
+        {nodes.map(([content, x, y]) => {
+          return (
+            <div
+              className="absolute shadow-box hover:shadow-box-md border-marble-900/10 border px-4 py-2 rounded-lg bg-white"
+              style={{
+                left: 20 + x * bandWidth + boxMargin,
+                top: 80 + y * rowHeight,
+                width: bandWidth - boxMargin * 2,
+              }}
+            >
+              {content}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+
+## App backend
+
+```bash
+canvas generate-scope-key
+```
+
+<CodeSwitcher>
+<CodeTab name="Node" className="language-node">
+```typescript
+import { generateToken } from "@canvas-sdk/node";
+
+const secretKey = "sk_12345";
+
+const scopes = { companyDomain: "dundermifflin.ai" };
+const expirationSeconds = 60 \* 60 \* 24 \* 7;
+const token = await generateToken(scopes, expirationSeconds, secretKey);
+
+````
+</CodeTab>
+<CodeTab name="Ruby">
+```ruby
+# Add gem 'canvas-embed' to your Gemfile
+
+secret_key = "sk_12345";
+
+scopes = {"companyDomain" => "dundermifflin.ai"}
+expiration_seconds = 60 * 60 * 24 * 7
+Canvas::Embed.generate_embed_token(secret_key, scopes, expiration_seconds)
+````
+
+</CodeTab>
+<CodeTab name="Python">
+```python
+import json
+import time
+import base64
+from nacl import utils, secret
+from nacl.secret import SecretBox
+from base64 import b64encode
+
+class InvalidScopeError(Exception):
+pass
+
+def generate_token(secret_key, scopes, expiration_seconds=3600):
+if not isinstance(scopes, dict):
+raise InvalidScopeError(f"Invalid scope {scopes} type {type(scopes)}")
+
+    key_id, key_hex = secret_key.split(".")
+    key_bytes = bytes.fromhex(key_hex)
+
+    # Create a random nonce
+    nonce = utils.random(secret.SecretBox.NONCE_SIZE)
+
+    # Create the message
+    message = { "scopes": scopes, "exp": time.time() + expiration_seconds }
+
+    # Create SecretBox with the given key
+    box = secret.SecretBox(key_bytes)
+
+    # Encrypt the message
+    encrypted_message = box.encrypt(bytes(json.dumps(message).encode('utf-8')), nonce)
+
+    # Convert encrypted message and nonce to Hex
+    encrypted_message_hex = encrypted_message.ciphertext.hex()
+    nonce_hex = nonce.hex()
+
+    # Prepare token to be returned
+    token = { "message": encrypted_message_hex, "nonce": nonce_hex, "keyId": key_id }
+
+    # Encode the token to Base64 before returning
+    return b64encode(json.dumps(token).encode()).decode()
+
+print(generate*token('sk*...', { "team_id": "123" }, 60\*60))
+
+````
+</CodeTab>
+<CodeTab name="PHP">
+```php
+namespace Canvas;
+
+require 'vendor/autoload.php';
+
+use ParagonIE_Sodium_Compat as Sodium;
+use Base64Url\Base64Url;
+
+class InvalidScopeError extends \Exception {}
+
+function generateToken($key, $scopes, $expiration) {
+    $keyParts = explode(".", $key);
+
+    $keyId = $keyParts[0];
+    $keyHex = $keyParts[1];
+
+    $keyBytes = Sodium::hex2bin($keyHex);
+
+    # Create a random nonce
+    $nonce = random_bytes(Sodium::CRYPTO_SECRETBOX_NONCEBYTES);
+    $expirationDate = time() + $expiration;
+
+    # Create the message
+    $message = json_encode(['scopes' => $scopes, 'exp' => $expirationDate], JSON_FORCE_OBJECT);
+
+    # Encrypt the message
+    $encryptedMessage = Sodium::crypto_secretbox($message, $nonce, $keyBytes);
+
+    # Convert encrypted message and nonce to Hex
+    $encryptedMessageHex = Sodium::bin2hex($encryptedMessage);
+    $nonceHex = Sodium::bin2hex($nonce);
+
+    # Prepare token to be returned
+    $token = json_encode(['message' => $encryptedMessageHex, 'nonce' => $nonceHex, 'keyId' => $keyId]);
+
+    # Encode the token to Base64 before returning
+    return rtrim(strtr(base64_encode($token), '+/', '-_'), '=');
+}
+
+````
+
+</CodeTab>
+</CodeSwitcher>
+
+## Frontend
+
+```typescript filename="lib/canvas.ts"
+import { Canvas } from "@canvas-sdk/canvas";
+
+const accessToken = ... /* Get this from generateToken()... TODO: middleware or await per-request? */
+
+export const canvas = new Canvas("sk_test_4jx8cvg", { accessToken });
+```
+
+```tsx filename="app/analytics/page.tsx"
+import { canvas } from "@/lib/canvas";
+
+export function Analytics() {
+  return <Chart canvas={canvas} />;
+}
+```
+
+## Canvas backend
+
+Once a scope is attached to a model, it will loudly fail if the requisite parameter is missing in the access token. This is to prevent potential footguns.
+
+Because they are baked into model definitions, they can't be "unfiltered" by a user.
