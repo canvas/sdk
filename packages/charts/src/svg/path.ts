@@ -1,33 +1,46 @@
 export function moveCursorTo(x: number, y: number): string {
-  return `M${x} ${y}`;
+  return `M${round(x)} ${round(y)}`;
 }
 
 export function moveCursor(deltaX: number, deltaY: number): string {
-  return `m${deltaX} ${deltaY}`;
+  return `m${round(deltaX)} ${round(deltaY)}`;
 }
 
 export function verticalLineTo(y: number): string {
-  return `V${y}`;
+  return `V${round(y)}`;
 }
 
 export function verticalLine(deltaY: number): string {
-  return `v${deltaY}`;
+  return `v${round(deltaY)}`;
 }
 
 export function lineTo(x: number, y: number): string {
-  return `L${x} ${y}`;
+  return `L${round(x)} ${round(y)}`;
 }
 
 export function line(deltaX: number, deltaY: number): string {
-  return `l${deltaX} ${deltaY}`;
+  return `l${round(deltaX)} ${round(deltaY)}`;
 }
 
 export function horizontalLineTo(x: number): string {
-  return `H${x}`;
+  return `H${round(x)}`;
 }
 
 export function horizontalLine(deltaX: number): string {
-  return `h${deltaX}`;
+  return `h${round(deltaX)}`;
+}
+
+export function bezierCurveTo(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  x: number,
+  y: number
+): string {
+  return `C${round(x1)} ${round(y1)} ${round(x2)} ${round(y2)} ${round(
+    x
+  )} ${round(y)}`;
 }
 
 export function ellipticalArcCurveTo(
@@ -39,9 +52,12 @@ export function ellipticalArcCurveTo(
   arc: "large" | "small" = "small",
   sweep: "clockwise" | "counterclockwise" = "clockwise"
 ): string {
-  return `A${radiusX} ${radiusY} ${angle} ${arc === "large" ? 1 : 0} ${
-    sweep === "clockwise" ? 1 : 0
-  } ${x} ${y}`;
+  const arcParam = arc === "large" ? 1 : 0;
+  const sweepParam = sweep === "clockwise" ? 1 : 0;
+
+  return `A${round(radiusX)} ${round(radiusY)} ${round(
+    angle
+  )} ${arcParam} ${sweepParam} ${round(x)} ${round(y)}`;
 }
 
 export function ellipticalArcCurve(
@@ -53,9 +69,12 @@ export function ellipticalArcCurve(
   arc: "large" | "small" = "small",
   sweep: "clockwise" | "counterclockwise" = "clockwise"
 ): string {
-  return `a${radiusX} ${radiusY} ${angle} ${arc === "large" ? 1 : 0} ${
-    sweep === "clockwise" ? 1 : 0
-  } ${deltaX} ${deltaY}`;
+  const arcParam = arc === "large" ? 1 : 0;
+  const sweepParam = sweep === "clockwise" ? 1 : 0;
+
+  return `a${round(radiusX)} ${round(radiusY)} ${round(
+    angle
+  )} ${arcParam} ${sweepParam} ${round(deltaX)} ${round(deltaY)}`;
 }
 
 /**
@@ -63,6 +82,6 @@ export function ellipticalArcCurve(
  *
  * Safe because our viewboxes roughly correspond to logical pixels.
  */
-export function roundPixel(value: number) {
+export function round(value: number) {
   return Math.round(value * 10) / 10;
 }
